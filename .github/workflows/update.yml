@@ -101,3 +101,14 @@ jobs:
           fi
           git commit -m "chore: отметка активности"
           git push
+
+  # Деплой вызывается из этого же запуска: коммит данных сделан через
+  # GITHUB_TOKEN и сам по себе другие workflow не запускает.
+  deploy:
+    needs: update
+    if: always()
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy.yml
