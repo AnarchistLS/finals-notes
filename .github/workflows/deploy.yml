@@ -16,7 +16,9 @@ on:
 
 concurrency:
   group: deploy-miniapp
-  cancel-in-progress: true
+  # Не отменяем предыдущий деплой: он мог быть вызван из задачи обновления
+  # и нести свежие данные. Деплои просто идут друг за другом.
+  cancel-in-progress: false
 
 permissions:
   contents: read
