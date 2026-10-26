@@ -108,23 +108,37 @@ Future<void> main(List<String> arguments) async {
       );
     }
 
+    final file = options.output(root);
+
+    // Если патчи и переводы не изменились, оставляем старую дату сборки:
+    // иначе файл менялся бы каждый час, а каждый коммит запускает деплой
+    // и жжёт минуты GitHub Actions.
+    var generatedAt = DateTime.now().toUtc().toIso8601String();
+    var engine = _engineName(backend);
+    final previous = _readPrevious(file);
+    if (previous != null &&
+        jsonEncode(previous['items']) == jsonEncode(items)) {
+      generatedAt = '${previous['generatedAt'] ?? generatedAt}';
+      engine = '${previous['engine'] ?? engine}';
+      _log('данные не изменились — файл останется прежним');
+    }
+
     final payload = {
-      'generatedAt': DateTime.now().toUtc().toIso8601String(),
-      'engine': _engineName(backend),
+      'generatedAt': generatedAt,
+      'engine': engine,
       'count': items.length,
       'items': items,
     };
     final json = jsonEncode(payload);
 
-    _log('движок: ${payload['engine']}, символов перевода: $translatedChars');
+    _log('движок: $engine, символов перевода: $translatedChars');
     _log('размер файла: ${(json.length / 1024).toStringAsFixed(1)} КБ');
 
     if (options.dryRun) {
-      _log('--dry-run: ${options.output(root).path} не записан');
+      _log('--dry-run: ${file.path} не записан');
       return;
     }
 
-    final file = options.output(root);
     await file.parent.create(recursive: true);
     await file.writeAsString(json);
     _log('готово: ${file.path}');
@@ -134,8 +148,20 @@ Future<void> main(List<String> arguments) async {
   }
 }
 
-String _engineName(TranslationBackend backend) => switch (backend) {
-      TranslationBackend.google => 'Google',
+/// Читает прошлый результат, чтобы понять, изменились ли данные.
+///
+/// Битый или отсутствующий файл - не ошибка: просто соберём заново.
+Map<String, dynamic>? _readPrevious(File file) {
+  if (!file.existsSync()) return null;
+  try {
+    final decoded = jsonDecode(file.readAsStringSync());
+    return decoded is Map<String, dynamic> ? decoded : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+String _engineName(TranslationBackend backend) => switch (backend) {      TranslationBackend.google => 'Google',
       TranslationBackend.deepl when DeepLStatus.blocked => 'Google (DeepL недоступен)',
       TranslationBackend.deepl when DeepLStatus.used => 'DeepL',
       TranslationBackend.deepl => 'DeepL (кеш)',

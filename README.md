@@ -101,7 +101,7 @@ dart run tool/bot.dart --watch --interval=600
 
 Бот — обычный консольный Dart-процесс, но держать компьютер включённым не
 обязательно: есть готовый workflow `.github/workflows/update.yml`, который
-раз в час запускает `tool/bot.dart --once` на GitHub Actions. Если хостинг
+раз в 2 часа запускает `tool/bot.dart --once` на GitHub Actions. Если хостинг
 в России, DeepL ответит `451 Unavailable in your region` — бот сам уйдёт на
 Google (в логе будет `движок: Google (DeepL недоступен)`), либо укажите
 `DEEPL_ENDPOINT` с прокси. На раннере GitHub блокировки нет, поэтому DeepL
@@ -120,7 +120,7 @@ Google (в логе будет `движок: Google (DeepL недоступен
 ### Как устроено
 
 ```
-GitHub Actions (раз в час, ~1–2 мин)
+GitHub Actions (раз в 2 часа, ~1–2 мин)
   └─ tool/bot.dart --once      пост в канал + кнопка «Открыть приложение»
   └─ tool/publish.dart         web/data/patches_ru.json (текст + переводы)
   └─ коммит данных
@@ -136,6 +136,12 @@ Cloudflare Pages
 - Если файла нет (обычный `flutter run -d chrome`), приложение работает
   по-старому: тянет сайт и переводит на лету.
 - Кеш переводов общий с ботом, поэтому новый патч переводится один раз.
+- `patches_ru.json` перезаписывается только когда патчи или переводы реально
+  изменились: иначе файл менялся бы каждый час, а каждый коммит запускал бы
+  сборку и деплой. Так минуты Actions тратятся только на новые патчи.
+- Расписание — раз в 2 часа: запуск занимает ~1–2 минуты, а бесплатный лимит
+  приватного репозитория — 2000 минут в месяц. Нужно быстрее — поменяйте
+  `cron` в `.github/workflows/update.yml` на `'23 * * * *'` (раз в час).
 
 Почему не локальная модель: Telegram WebView не запустит Gemma, а держать ПК
 включённым 24/7 не нужно. DeepL при этом доступен — блокировка `451` зависит
@@ -216,7 +222,7 @@ tool/proxy.dart               локальный CORS-прокси для зап
 tool/serve.dart               раздача release-сборки web
 tool/build-apk.ps1            сборка APK (через ASCII-путь, см. ниже)
 tool/make-icon.ps1            генерация иконки приложения
-.github/workflows/update.yml  раз в час: пост в канал + данные для Mini App
+.github/workflows/update.yml  раз в 2 часа: пост в канал + данные для Mini App
 .github/workflows/deploy.yml  сборка web и деплой на Cloudflare Pages
 test/stat_parser_test.dart    тесты логики сравнения показателей
 test/translator_test.dart     тесты пакетного перевода и кеша
