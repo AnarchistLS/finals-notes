@@ -21,6 +21,23 @@ String escapeHtml(String input) => input
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;');
 
+/// Кнопка «Открыть приложение» под постом.
+///
+/// В каналах кнопки `web_app` не работают, поэтому ведём обычной ссылкой на
+/// прямую ссылку Mini App вида `https://t.me/<бот>/<short name>`. Пустой
+/// адрес означает «кнопка не нужна» — вернётся `null`.
+Map<String, dynamic>? miniAppKeyboard(String url) {
+  final value = url.trim();
+  if (value.isEmpty) return null;
+  return {
+    'inline_keyboard': [
+      [
+        {'text': 'Открыть приложение', 'url': value},
+      ],
+    ],
+  };
+}
+
 /// Делит готовый текст на сообщения не длиннее [limit].
 ///
 /// Строки уже самодостаточны (каждая закрывает свои теги), поэтому режем

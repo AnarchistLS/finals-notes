@@ -198,7 +198,7 @@ Future<void> _runOnce({
       channel: config.channel,
       text: messages[i],
       // Кнопку вешаем только на последнее сообщение длинного поста.
-      replyMarkup: isLast ? _miniAppKeyboard(config.miniAppUrl) : null,
+      replyMarkup: isLast ? miniAppKeyboard(config.miniAppUrl) : null,
     );
     _log('отправлено ${i + 1}/${messages.length}');
     if (i + 1 < messages.length) {
@@ -211,22 +211,6 @@ Future<void> _runOnce({
   state.lastPostedAt = DateTime.now().toIso8601String();
   await state.save(stateFile);
   _log('готово: ${patch.title}');
-}
-
-/// Кнопка «Открыть приложение» под последним сообщением поста.
-///
-/// В каналах кнопки `web_app` не работают, поэтому ведём обычной ссылкой на
-/// прямую ссылку Mini App вида `https://t.me/<бот>/<короткое имя>`.
-Map<String, dynamic>? _miniAppKeyboard(String url) {
-  final value = url.trim();
-  if (value.isEmpty) return null;
-  return {
-    'inline_keyboard': [
-      [
-        {'text': 'Открыть приложение', 'url': value},
-      ],
-    ],
-  };
 }
 
 Future<void> _sendMessage({

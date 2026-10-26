@@ -168,4 +168,18 @@ void main() {
     expect(text, contains('<b>ИЗВЕСТНЫЕ ПРОБЛЕМЫ</b>'));
     expect(text, contains('• Sound bug.'));
   });
+
+  test('кнопка Mini App ведёт на прямую ссылку и пропадает без адреса', () {
+    expect(miniAppKeyboard(''), isNull);
+    expect(miniAppKeyboard('   '), isNull);
+
+    final keyboard = miniAppKeyboard('https://t.me/finals_notes_bot/app');
+    final rows = (keyboard!['inline_keyboard'] as List).single as List;
+    final button = rows.single as Map<String, dynamic>;
+
+    expect(button['text'], 'Открыть приложение');
+    expect(button['url'], 'https://t.me/finals_notes_bot/app');
+    expect(button.containsKey('web_app'), isFalse);
+  });
 }
+
