@@ -26,6 +26,10 @@ concurrency:
 
 permissions:
   contents: write
+  # Нужны задаче деплоя, которую этот workflow вызывает: без них
+  # deploy-pages не может запросить OIDC-токен и падает.
+  pages: write
+  id-token: write
 
 jobs:
   update:
