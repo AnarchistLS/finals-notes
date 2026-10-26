@@ -51,7 +51,9 @@ jobs:
           TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
           TRANSLATE_BACKEND: deepl
           DEEPL_KEY: ${{ secrets.DEEPL_KEY }}
-          MINIAPP_URL: ${{ vars.MINIAPP_URL }}
+          # Ссылка на Mini App. По умолчанию - короткий адрес нашего бота,
+          # чтобы кнопка работала и без настройки variable.
+          MINIAPP_URL: ${{ vars.MINIAPP_URL || 'https://t.me/finals_notes_bot/app' }}
         run: dart run tool/bot.dart --once ${{ inputs.force && '--force' || '' }}
 
       - name: Запомнить текущий патч
