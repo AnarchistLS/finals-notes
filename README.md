@@ -101,7 +101,7 @@ dart run tool/bot.dart --watch --interval=600
 
 Бот — обычный консольный Dart-процесс, но держать компьютер включённым не
 обязательно: есть готовый workflow `.github/workflows/update.yml`, который
-раз в 2 часа запускает `tool/bot.dart --once` на GitHub Actions. Если хостинг
+раз в 15 минут запускает `tool/bot.dart --once` на GitHub Actions. Если хостинг
 в России, DeepL ответит `451 Unavailable in your region` — бот сам уйдёт на
 Google (в логе будет `движок: Google (DeepL недоступен)`), либо укажите
 `DEEPL_ENDPOINT` с прокси. На раннере GitHub блокировки нет, поэтому DeepL
@@ -120,13 +120,17 @@ Google (в логе будет `движок: Google (DeepL недоступен
 ### Как устроено
 
 ```
-GitHub Actions (раз в 2 часа, ~1–2 мин)
+GitHub Actions (раз в 15 минут, ~1–2 мин)
   └─ tool/bot.dart --once      пост в канал + кнопка «Открыть приложение»
   └─ tool/publish.dart         web/data/patches_ru.json (текст + переводы)
   └─ коммит данных
-Cloudflare Pages
+GitHub Pages
   └─ build/web + data/patches_ru.json  ← читает Mini App
 ```
+
+Хостинг — GitHub Pages (`https://<логин>.github.io/finals-notes/`), а не
+Cloudflare Pages: провайдеры в России блокируют `*.pages.dev`, домен
+подменяется заглушкой. `github.io` открывается без VPN.
 
 - `tool/publish.dart` тянет патчи, переводит их один раз и пишет
   `web/data/patches_ru.json`: сам патч плюс карта «оригинал → перевод».
@@ -137,11 +141,14 @@ Cloudflare Pages
   по-старому: тянет сайт и переводит на лету.
 - Кеш переводов общий с ботом, поэтому новый патч переводится один раз.
 - `patches_ru.json` перезаписывается только когда патчи или переводы реально
-  изменились: иначе файл менялся бы каждый час, а каждый коммит запускал бы
-  сборку и деплой. Так минуты Actions тратятся только на новые патчи.
-- Расписание — раз в 2 часа: запуск занимает ~1–2 минуты, а бесплатный лимит
-  приватного репозитория — 2000 минут в месяц. Нужно быстрее — поменяйте
-  `cron` в `.github/workflows/update.yml` на `'23 * * * *'` (раз в час).
+  изменились: иначе файл менялся бы каждые 15 минут, а каждый коммит запускал
+  бы сборку и деплой.
+- Расписание — раз в 15 минут. У публичного репозитория минуты Actions
+  бесплатны и безлимитны, так что частые проверки ничего не стоят. Если
+  репозиторий снова станет приватным, верните `'23 */2 * * *'`: 2000 минут в
+  месяц на 15-минутные запуски не хватит.
+- GitHub отключает расписание в публичном репозитории после 60 дней без
+  коммитов, поэтому раз в месяц workflow сам коммитит `tool/.last-run`.
 
 Почему не локальная модель: Telegram WebView не запустит Gemma, а держать ПК
 включённым 24/7 не нужно. DeepL при этом доступен — блокировка `451` зависит
@@ -150,46 +157,48 @@ Cloudflare Pages
 
 ### Настройка (один раз)
 
-1. Репозиторий на GitHub (можно приватный) и `git push` из папки проекта.
-2. Cloudflare Pages: проект `finals-notes` создастся сам при первом деплое,
-   адрес будет `https://finals-notes.pages.dev`.
+1. Репозиторий на GitHub, **публичный**, и `git push` из папки проекта.
+   Публичный нужен потому, что GitHub Pages бесплатен только для открытых
+   репозиториев. Секретов в коде нет: ключ DeepL передаётся при сборке через
+   `--dart-define` и в репозитории не хранится.
+2. Settings → Pages → **Source: GitHub Actions**. После первого пуша адрес
+   будет `https://<логин>.github.io/finals-notes/`.
 3. Secrets репозитория (Settings → Secrets and variables → Actions):
 
    | Secret | Значение |
    |---|---|
    | `TELEGRAM_BOT_TOKEN` | токен от @BotFather |
    | `TELEGRAM_CHANNEL` | `@username` или `-100…` |
-   | `DEEPL_KEY` | ключ DeepL API Free |
-   | `CLOUDFLARE_API_TOKEN` | токен с правом «Cloudflare Pages: Edit» |
-   | `CLOUDFLARE_ACCOUNT_ID` | id аккаунта Cloudflare |
+   | `DEEPL_KEY` | ключ DeepL API Free (для бота и пайплайна в CI) |
 
    Variable `MINIAPP_URL` = `https://t.me/<бот>/<short name>` — из неё бот
    делает кнопку под постом (в каналах кнопки `web_app` не работают, поэтому
    нужна именно ссылка).
 4. BotFather → `/newapp`: выбрать бота, задать название, описание, иконку и
-   **Web App URL** = `https://finals-notes.pages.dev`, short name — `app`.
-   После этого `https://t.me/<бот>/app` открывает приложение.
+   **Web App URL** = `https://<логин>.github.io/finals-notes/`, short name —
+   `app`. После этого `https://t.me/<бот>/app` открывает приложение.
 5. Первый запуск: Actions → «Обновление патчей» → Run workflow с включённым
    `init`, чтобы бот запомнил текущий патч и не опубликовал его повторно.
 
-> **Репозиторий должен оставаться приватным.** Ключ DeepL вшит в исходники
-> (`lib/services/bundled_key.dart`) — это сделано для APK, но в публичном
-> репозитории ключ увидят все. Если репозиторий нужен публичным, удалите ключ
-> из исходников и передавайте его только через secrets.
+> **Ключ DeepL в репозитории не хранится.** `lib/services/bundled_key.dart`
+> читает его из `--dart-define=DEEPL_KEY=...`, поэтому в веб-сборке ключа нет
+> (Mini App ничего не переводит, а ключ в `main.dart.js` смог бы достать
+> кто угодно). Для APK ключ передаёт `tool/build-apk.ps1`, беря его из
+> `tool/bot.env` или переменной окружения `DEEPL_KEY`.
 
-Если `pages.dev` из России окажется медленным, привяжите к проекту свой домен
-(Cloudflare → Pages → Custom domain) или перенесите статику на GitHub Pages:
-приложению всё равно, откуда читать `data/patches_ru.json`.
+Если `github.io` окажется медленным, привяжите свой домен (Settings → Pages →
+Custom domain): приложению всё равно, откуда читать `data/patches_ru.json`.
 
 ### Локальная проверка
 
 ```powershell
 dart run tool/publish.dart            # собрать web/data/patches_ru.json
-flutter build web --release
+flutter build web --release --base-href /finals-notes/
 dart run tool/serve.dart build/web 8081
 ```
 
-`http://localhost:8081` — ровно то, что увидит Telegram (только без его шапки).
+`http://localhost:8081/finals-notes/` — ровно то, что увидит Telegram
+(только без его шапки). Без `--base-href` откройте просто `http://localhost:8081/`.
 
 ## Структура
 
@@ -222,8 +231,8 @@ tool/proxy.dart               локальный CORS-прокси для зап
 tool/serve.dart               раздача release-сборки web
 tool/build-apk.ps1            сборка APK (через ASCII-путь, см. ниже)
 tool/make-icon.ps1            генерация иконки приложения
-.github/workflows/update.yml  раз в 2 часа: пост в канал + данные для Mini App
-.github/workflows/deploy.yml  сборка web и деплой на Cloudflare Pages
+.github/workflows/update.yml  раз в 15 минут: пост в канал + данные для Mini App
+.github/workflows/deploy.yml  сборка web и деплой на GitHub Pages
 test/stat_parser_test.dart    тесты логики сравнения показателей
 test/translator_test.dart     тесты пакетного перевода и кеша
 test/deepl_test.dart          тесты DeepL: запрос, ошибки, откат на Google

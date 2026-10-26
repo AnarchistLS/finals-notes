@@ -25,7 +25,14 @@ void main() {
     expect(find.text('Движок перевода'), findsOneWidget);
     expect(find.text('DeepL'), findsOneWidget);
     expect(find.text('Google'), findsOneWidget);
-    // Ключ вшит в сборку, поэтому по умолчанию выбран DeepL и поле ключа видно.
+
+    // Ключа в сборке нет (он передаётся только при сборке APK), поэтому
+    // по умолчанию выбран Google и поле ключа скрыто.
+    expect(find.text('Ключ DeepL API'), findsNothing);
+
+    await tester.tap(find.text('DeepL'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Ключ DeepL API'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -44,6 +51,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+
+    await tester.tap(find.text('DeepL'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ключ DeepL API'), findsOneWidget);
 
     await tester.tap(find.text('Google'));
     await tester.pumpAndSettle();

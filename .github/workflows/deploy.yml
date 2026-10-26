@@ -1,8 +1,11 @@
 name: Деплой Mini App
 
-# Собираем Flutter Web и выкладываем на Cloudflare Pages.
+# Собираем Flutter Web и выкладываем на GitHub Pages.
 # Запускается на каждый пуш в main (в том числе на коммит с новыми данными)
 # и вручную из вкладки Actions.
+#
+# Почему GitHub Pages, а не Cloudflare: провайдеры в России блокируют
+# *.pages.dev (домен подменяется заглушкой), а github.io открывается.
 on:
   push:
     branches: [main]
@@ -14,12 +17,16 @@ concurrency:
 
 permissions:
   contents: read
-  deployments: write
+  pages: write
+  id-token: write
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - uses: actions/checkout@v4
@@ -33,22 +40,19 @@ jobs:
       - name: Зависимости
         run: flutter pub get
 
+      # base-href = путь проекта на GitHub Pages: /<репозиторий>/
       - name: Сборка web
-        run: flutter build web --release --base-href /
+        run: flutter build web --release --base-href /finals-notes/
 
-      # Проект создаётся один раз; если он уже есть - шаг просто падает
-      # с ошибкой "already exists", и это нормально.
-      - name: Создать проект Pages (если его нет)
-        continue-on-error: true
-        uses: cloudflare/wrangler-action@v3
+      # enablement включает Pages, если он ещё не включён в настройках.
+      - uses: actions/configure-pages@v5
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages project create finals-notes --production-branch=main
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
 
       - name: Выложить
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy build/web --project-name=finals-notes --branch=main
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -41,6 +41,17 @@ if (-not (Test-Path $env:ANDROID_HOME)) { throw "Нет Android SDK: $env:ANDROI
 if (-not (Test-Path $env:JAVA_HOME)) { throw "Нет JDK: $env:JAVA_HOME" }
 $env:PATH = "$env:PATH;$env:ANDROID_HOME\platform-tools"
 
+# --- ключ DeepL (нужен только для перевода на телефоне) ---
+# В репозитории ключа нет: берём из переменной окружения или из tool\bot.env.
+$deeplKey = $env:DEEPL_KEY
+$envFile = Join-Path $project "tool\bot.env"
+if (-not $deeplKey -and (Test-Path $envFile)) {
+  $line = Get-Content $envFile -Encoding UTF8 |
+    Where-Object { $_ -match '^\s*DEEPL_KEY\s*=' } |
+    Select-Object -First 1
+  if ($line) { $deeplKey = ($line -split '=', 2)[1].Trim().Trim('"').Trim("'") }
+}
+
 # --- зеркало исходников в ASCII-путь ---
 Write-Host "Синхронизирую исходники: $project -> $Work"
 robocopy $project $Work /MIR /XD build .dart_tool .gradle .idea /NFL /NDL /NJH /NJS /NP | Out-Null
@@ -61,7 +72,14 @@ if ($NoImpeller) {
 # --- сборка ---
 Push-Location $Work
 try {
-  & $flutter build apk --release
+  $buildArgs = @("build", "apk", "--release")
+  if ($deeplKey) {
+    Write-Host "Ключ DeepL: передан в сборку"
+    $buildArgs += "--dart-define=DEEPL_KEY=$deeplKey"
+  } else {
+    Write-Host "Ключ DeepL не найден (tool\bot.env) - APK будет переводить через Google"
+  }
+  & $flutter @buildArgs
   if ($LASTEXITCODE -ne 0) { throw "Сборка не удалась (код $LASTEXITCODE)" }
 }
 finally {

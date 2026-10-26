@@ -44,6 +44,9 @@ Future<void> main(List<String> args) async {
 
     var path = Uri.decodeComponent(request.uri.path);
     if (path == '/' || path.isEmpty) path = '/index.html';
+    // Каталог без имени файла: отдаём его index.html (нужно для сборки с
+    // --base-href /<репозиторий>/, как на GitHub Pages).
+    if (path.endsWith('/')) path = '${path}index.html';
 
     var file = File('$root$path');
     if (!file.existsSync()) {
