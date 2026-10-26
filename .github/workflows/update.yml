@@ -19,7 +19,7 @@ on:
         type: boolean
         default: false
 
-# Коммит данных запускает деплой, но не этот workflow: здесь нет push-триггера.
+# Один запуск за раз: два обновления одновременно писали бы в одни файлы.
 concurrency:
   group: update-patches
   cancel-in-progress: false
@@ -34,6 +34,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Полная история: если кто-то закоммитил в main, пока шёл запуск,
+          # rebase перед push должен найти общий предок.
+          fetch-depth: 0
 
       - uses: subosito/flutter-action@v2
         with:
@@ -82,7 +86,17 @@ jobs:
             exit 0
           fi
           git commit -m "data: патчи на $(date -u +%Y-%m-%dT%H:%MZ)"
-          git push
+          # Пока шёл запуск, в main мог прилететь чужой коммит (например,
+          # правка кода). Тогда push отклоняется - подтягиваем и пробуем снова.
+          for attempt in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            echo "push не прошёл, подтягиваю изменения (попытка $attempt)"
+            git pull --rebase --autostash || true
+          done
+          echo "не удалось запушить данные" >&2
+          exit 1
 
       - name: Отметка активности
         # GitHub отключает расписание в публичном репозитории после 60 дней
