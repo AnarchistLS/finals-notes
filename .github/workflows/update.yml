@@ -10,6 +10,9 @@ name: Обновление патчей
 on:
   schedule:
     - cron: '*/10 * * * *'
+  # Временный триггер для проверки цепочки (убран следующим коммитом).
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       init:
