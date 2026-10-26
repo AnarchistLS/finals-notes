@@ -1,0 +1,21 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+
+# Платформы (генерируются flutter create)
+android/.gradle/
+android/local.properties
+ios/Pods/
+
+# ОС
+Thumbs.db
+.DS_Store
+
+# Бот для Telegram: только секреты. Состояние и кеш переводов коммитим -
+# они нужны CI, чтобы не постить патч дважды и не жечь квоту DeepL.
+tool/bot.env

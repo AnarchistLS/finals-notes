@@ -1,0 +1,71 @@
+name: Обновление патчей
+
+# Раз в час проверяем сайт: если вышел новый патч - переводим, постим в канал
+# и обновляем данные для Mini App. Ничего не требует включённого ПК.
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+    inputs:
+      init:
+        description: 'Запомнить текущий патч и ничего не публиковать'
+        type: boolean
+        default: false
+
+# Коммит данных запускает деплой, но не этот workflow: здесь нет push-триггера.
+concurrency:
+  group: update-patches
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Зависимости
+        run: dart pub get
+
+      - name: Пост в канал
+        if: ${{ !inputs.init }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+          TRANSLATE_BACKEND: deepl
+          DEEPL_KEY: ${{ secrets.DEEPL_KEY }}
+          MINIAPP_URL: ${{ vars.MINIAPP_URL }}
+        run: dart run tool/bot.dart --once
+
+      - name: Запомнить текущий патч
+        if: ${{ inputs.init }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+        run: dart run tool/bot.dart --once --init
+
+      - name: Данные для Mini App
+        env:
+          TRANSLATE_BACKEND: deepl
+          DEEPL_KEY: ${{ secrets.DEEPL_KEY }}
+        run: dart run tool/publish.dart
+
+      - name: Коммит данных
+        run: |
+          git config user.name "finals-notes bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add web/data tool/.bot-state.json tool/.translation-cache.json
+          if git diff --cached --quiet; then
+            echo "Изменений нет"
+            exit 0
+          fi
+          git commit -m "data: патчи на $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push

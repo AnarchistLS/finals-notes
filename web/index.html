@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="description" content="Патчноуты THE FINALS на русском: баланс, оружие, специализации и карты.">
+  <meta name="theme-color" content="#08080C">
+  <meta name="color-scheme" content="dark">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Патчноуты">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>THE FINALS — патчноуты</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Telegram Mini App SDK. Если страницу открыли в обычном браузере,
+       скрипт просто создаст window.Telegram, а наши проверки его пропустят. -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #08080C;
+      overflow: hidden;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Заставка, пока грузится CanvasKit. Убираем её по первому кадру Flutter. */
+    #splash {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: #08080C;
+      color: #F5F6FA;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      transition: opacity 0.22s ease;
+    }
+
+    #splash-title {
+      font-size: 13px;
+      letter-spacing: 5px;
+      font-weight: 700;
+      color: #E4FF3F;
+    }
+
+    #splash-sub {
+      font-size: 15px;
+      color: #9AA0B4;
+      animation: splash-pulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes splash-pulse {
+      0%, 100% { opacity: 0.45; }
+      50% { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div id="splash">
+    <div id="splash-title">THE FINALS</div>
+    <div id="splash-sub">Патчноуты · загрузка</div>
+  </div>
+
+  <script>
+    // Telegram Mini App: разворачиваем на весь экран и красим шапку/фон под тему.
+    (function () {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (!tg) return;
+      try {
+        tg.ready();
+        tg.expand();
+        if (tg.setHeaderColor) tg.setHeaderColor('#08080C');
+        if (tg.setBackgroundColor) tg.setBackgroundColor('#08080C');
+        // В полноэкранном режиме свайп вниз закрывает приложение - отключаем,
+        // чтобы он не мешал листать длинные патчноуты.
+        if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
+
+        var insets = tg.contentSafeAreaInset || { top: 0, bottom: 0 };
+        var splash = document.getElementById('splash');
+        if (splash) {
+          splash.style.padding = (insets.top || 0) + 'px 0 ' + (insets.bottom || 0) + 'px';
+        }
+      } catch (e) {
+        // Старый клиент Telegram: просто работаем как обычная веб-страница.
+      }
+    })();
+
+    window.addEventListener('flutter-first-frame', function () {
+      var splash = document.getElementById('splash');
+      if (!splash) return;
+      splash.style.opacity = '0';
+      setTimeout(function () {
+        if (splash.parentNode) splash.parentNode.removeChild(splash);
+      }, 240);
+    });
+  </script>
+
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
