@@ -14,6 +14,10 @@ on:
         description: 'Запомнить текущий патч и ничего не публиковать'
         type: boolean
         default: false
+      force:
+        description: 'Опубликовать патч заново, даже если он уже был'
+        type: boolean
+        default: false
 
 # Коммит данных запускает деплой, но не этот workflow: здесь нет push-триггера.
 concurrency:
@@ -48,7 +52,7 @@ jobs:
           TRANSLATE_BACKEND: deepl
           DEEPL_KEY: ${{ secrets.DEEPL_KEY }}
           MINIAPP_URL: ${{ vars.MINIAPP_URL }}
-        run: dart run tool/bot.dart --once
+        run: dart run tool/bot.dart --once ${{ inputs.force && '--force' || '' }}
 
       - name: Запомнить текущий патч
         if: ${{ inputs.init }}
