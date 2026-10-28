@@ -333,6 +333,7 @@ const Map<String, String> _genitive = {
   'хитбокс': 'хитбокса',
   'предпросмотр': 'предпросмотра',
   'скорострельность': 'скорострельности',
+  'вспышки': 'вспышек',
 };
 
 /// Переводит название характеристики, не трогая имена предметов.
@@ -352,8 +353,8 @@ String translateStatName(String input) {
   final ofMatch = RegExp(r'^(.*?)\s+of\s+(.+)$', caseSensitive: false)
       .firstMatch(protectedText);
   if (ofMatch != null) {
-    final left = _translateWords(ofMatch.group(1)!);
-    final right = _translateWords(ofMatch.group(2)!);
+    final left = _translateWords(_dropArticle(ofMatch.group(1)!));
+    final right = _translateWords(_dropArticle(ofMatch.group(2)!));
     if (left != null && right != null && !right.contains(' ')) {
       final genitive = _genitive[right.toLowerCase()];
       if (genitive != null) {
@@ -362,11 +363,39 @@ String translateStatName(String input) {
     }
   }
 
+  // «Smoke duration» -> «длительность дыма»: та же связка, но слово
+  // «duration» стоит после предмета. Заодно разбираем «minimum/maximum».
+  final durationMatch =
+      RegExp(r'^(.+?)\s+duration$', caseSensitive: false).firstMatch(protectedText);
+  if (durationMatch != null) {
+    var head = _dropArticle(durationMatch.group(1)!);
+    String? modifier;
+    final modMatch =
+        RegExp(r'^(min|minimum|max|maximum)\s+(.+)$', caseSensitive: false)
+            .firstMatch(head);
+    if (modMatch != null) {
+      modifier = modMatch.group(1)!.toLowerCase().startsWith('min')
+          ? 'минимальная'
+          : 'максимальная';
+      head = modMatch.group(2)!;
+    }
+    final noun = _translateWords(head);
+    final genitive = noun == null ? null : _genitive[noun.toLowerCase()];
+    if (genitive != null) {
+      final prefix = modifier == null ? '' : '$modifier ';
+      return _restore('$prefixдлительность $genitive', terms);
+    }
+  }
+
   final direct = _translateWords(protectedText);
   if (direct != null) return _restore(direct, terms);
 
   return input;
 }
+
+/// Убирает артикль в начале английской фразы: «the smoke» -> «smoke».
+String _dropArticle(String text) =>
+    text.trim().replaceFirst(RegExp(r'^the\s+', caseSensitive: false), '');
 
 /// Переводит фразу по словарю. `null`, если словарь не знает фразу целиком.
 String? _translateWords(String mixed) {

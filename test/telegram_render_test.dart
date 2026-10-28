@@ -177,9 +177,63 @@ void main() {
     final rows = (keyboard!['inline_keyboard'] as List).single as List;
     final button = rows.single as Map<String, dynamic>;
 
-    expect(button['text'], 'Открыть приложение');
+    expect(button['text'], '📱 Открыть в приложении');
     expect(button['url'], 'https://t.me/finals_notes_bot/app');
     expect(button.containsKey('web_app'), isFalse);
+  });
+
+  test('анонс: счётчики, самые заметные изменения и ссылка в приложение', () {
+    final patch = _patch(
+      title: 'PRIME TIME',
+      stats: [
+        _stat(stat: 'Damage', before: 24, after: 26, impact: Impact.buff, item: 'ARN-220'),
+        _stat(stat: 'Cooldown', before: 40, after: 20, impact: Impact.buff, item: 'Zipline'),
+        _stat(stat: 'Magazine size', before: 30, after: 29, impact: Impact.nerf, item: 'AKM'),
+      ],
+    );
+
+    final text = renderTeaser(
+      patch,
+      translations: {'Cooldown': 'кулдаун'},
+      appUrl: 'https://t.me/finals_notes_bot/app',
+      maxHighlights: 2,
+    ).single;
+
+    expect(text, contains('🔥 <b>Патч 12.0.0 — PRIME TIME</b>'));
+    expect(text, contains('▲ 2 улучшения · ▼ 1 ослабление'));
+    expect(text, contains('<b>3 изменения</b> · 3 предмета'));
+    // Самое крупное относительное изменение — первым.
+    expect(text, contains('▲ Кулдаун (Zipline): 40 → 20'));
+    expect(text.indexOf('Zipline'), lessThan(text.indexOf('ARN-220')));
+    expect(text, contains('…и ещё 1 изменение.'));
+    expect(text, contains('📱 <b>Все 3 изменения — в нашем приложении</b>'));
+    expect(text, contains('<a href="https://t.me/finals_notes_bot/app">'));
+    expect(text.length, lessThanOrEqualTo(telegramMessageLimit));
+  });
+
+  test('анонс без адреса приложения ведёт на сайт', () {
+    final patch = _patch(
+      stats: [_stat(stat: 'Damage', before: 24, after: 26, impact: Impact.buff, item: 'ARN-220')],
+    );
+
+    final text = renderTeaser(patch).single;
+    expect(text, contains('reachthefinals.com'));
+    expect(text, isNot(contains('в приложении')));
+  });
+
+  test('анонс патча без цифр показывает пункты и зовёт в приложение', () {
+    final patch = _patch(
+      sections: const [
+        PatchSection(
+          title: 'BUG FIXES',
+          blocks: [DocBlock(kind: 'li', text: 'Fixed a rare crash on load.')],
+        ),
+      ],
+    );
+
+    final text = renderTeaser(patch, appUrl: 'https://t.me/finals_notes_bot/app').single;
+    expect(text, contains('• Fixed a rare crash on load.'));
+    expect(text, contains('📱 <b>Весь патч — в нашем приложении</b>'));
   });
 }
 

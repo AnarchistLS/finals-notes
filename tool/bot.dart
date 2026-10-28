@@ -6,7 +6,8 @@
 ///   dart run tool/bot.dart --dry-run          # показать пост, никуда не отправляя
 ///   dart run tool/bot.dart --once             # проверить и опубликовать новый патч
 ///   dart run tool/bot.dart --watch            # проверять каждые 10 минут
-///   dart run tool/bot.dart --full --dry-run   # весь текст, а не дайджест
+///   dart run tool/bot.dart --full --dry-run   # весь текст, а не анонс
+///   dart run tool/bot.dart --digest --dry-run # полный список изменений текстом
 ///
 /// Настройки берутся из `tool/bot.env` (см. `tool/bot.env.example`) или из
 /// переменных окружения. Без токена бот работает в режиме `--dry-run`.
@@ -133,7 +134,7 @@ Future<void> _runOnce({
   _log('патч: ${patch.title} (${patch.version}, ${patch.dateText})');
   _log(
     'секций: ${patch.sections.length}, изменений: ${patch.stats.length}, '
-    'режим: ${config.full ? 'полный текст' : 'дайджест'}',
+    'режим: ${config.full ? 'полный текст' : config.digest ? 'дайджест' : 'анонс'}',
   );
 
   DeepLStatus.reset();
@@ -176,7 +177,13 @@ Future<void> _runOnce({
 
   final messages = config.full
       ? renderFull(patch, translations: translations)
-      : renderDigest(patch, translations: translations);
+      : config.digest
+          ? renderDigest(patch, translations: translations)
+          : renderTeaser(
+              patch,
+              translations: translations,
+              appUrl: config.miniAppUrl,
+            );
 
   _log('сообщений: ${messages.length}');
 
@@ -300,6 +307,7 @@ class _Options {
   _Options({
     this.dryRun = false,
     this.full = false,
+    this.digest = false,
     this.force = false,
     this.watch = false,
     this.list = false,
@@ -312,6 +320,7 @@ class _Options {
 
   final bool dryRun;
   final bool full;
+  final bool digest;
   final bool force;
   final bool watch;
   final bool list;
@@ -324,6 +333,7 @@ class _Options {
   static _Options parse(List<String> args) {
     var dryRun = false;
     var full = false;
+    var digest = false;
     var force = false;
     var watch = false;
     var list = false;
@@ -338,6 +348,8 @@ class _Options {
         dryRun = true;
       } else if (arg == '--full') {
         full = true;
+      } else if (arg == '--digest') {
+        digest = true;
       } else if (arg == '--force') {
         force = true;
       } else if (arg == '--watch') {
@@ -365,6 +377,7 @@ class _Options {
     return _Options(
       dryRun: dryRun,
       full: full,
+      digest: digest,
       force: force,
       watch: watch,
       list: list,
@@ -387,6 +400,7 @@ class _Config {
     required this.miniAppUrl,
     required this.dryRun,
     required this.full,
+    required this.digest,
     required this.force,
     required this.watch,
     required this.list,
@@ -404,6 +418,7 @@ class _Config {
   final String miniAppUrl;
   final bool dryRun;
   final bool full;
+  final bool digest;
   final bool force;
   final bool watch;
   final bool list;
@@ -446,6 +461,7 @@ class _Config {
       miniAppUrl: values['MINIAPP_URL'] ?? '',
       dryRun: options.dryRun,
       full: options.full,
+      digest: options.digest,
       force: options.force,
       watch: options.watch,
       list: options.list,
@@ -478,7 +494,8 @@ void _printHelp() {
   --once             проверить сайт и опубликовать новый патч (по умолчанию)
   --watch            проверять сайт по кругу
   --interval=600     пауза между проверками в секундах (по умолчанию 600)
-  --full             публиковать весь переведённый текст, а не дайджест
+  --full             публиковать весь переведённый текст, а не анонс
+  --digest           полный список изменений текстом (старый формат)
   --force            опубликовать патч, даже если он уже был опубликован
   --init             запомнить текущий патч и ничего не публиковать
   --patch=ID         взять конкретный патч по id или хвосту слага

@@ -32,7 +32,7 @@ Map<String, dynamic>? miniAppKeyboard(String url) {
   return {
     'inline_keyboard': [
       [
-        {'text': 'Открыть приложение', 'url': value},
+        {'text': '📱 Открыть в приложении', 'url': value},
       ],
     ],
   };
@@ -227,6 +227,106 @@ List<String> renderDigest(
   return builder.build();
 }
 
+/// Короткий анонс патча для канала.
+///
+/// Пост не заменяет приложение, а показывает только верхушку: счётчики,
+/// несколько самых заметных изменений и ссылку на Mini App. Полный список
+/// намеренно остаётся в приложении - иначе в канал незачем заходить.
+List<String> renderTeaser(
+  PatchDoc patch, {
+  Map<String, String> translations = const {},
+  String appUrl = '',
+  int maxHighlights = 4,
+}) {
+  final builder = MessageBuilder();
+  final title = translateTitle(patch.title).trim();
+  final version = patch.version.trim();
+
+  final heading = [
+    if (version.isNotEmpty) 'Патч $version',
+    if (title.isNotEmpty) escapeHtml(title),
+  ].join(' — ');
+  builder.line('🔥 <b>$heading</b>');
+  builder.line('<i>${patch.dateText}</i>');
+
+  final stats = patch.stats;
+  if (stats.isNotEmpty) {
+    final buffs = patch.buffCount;
+    final nerfs = patch.nerfCount;
+    final neutral = stats.length - buffs - nerfs;
+    final items = stats
+        .map((change) => change.item.trim())
+        .where((item) => item.isNotEmpty)
+        .toSet()
+        .length;
+
+    builder.line('');
+    final parts = <String>[
+      if (buffs > 0) '▲ $buffs ${_plural(buffs, 'улучшение', 'улучшения', 'улучшений')}',
+      if (nerfs > 0) '▼ $nerfs ${_plural(nerfs, 'ослабление', 'ослабления', 'ослаблений')}',
+      if (neutral > 0) '● $neutral ${_plural(neutral, 'изменение', 'изменения', 'изменений')}',
+    ];
+    if (parts.isNotEmpty) builder.line(parts.join(' · '));
+    builder.line(
+      '<b>${stats.length} ${_plural(stats.length, 'изменение', 'изменения', 'изменений')}</b>'
+      '${items > 0 ? ' · $items ${_plural(items, 'предмет', 'предмета', 'предметов')}' : ''}',
+    );
+
+    final highlights = _topChanges(stats, maxHighlights);
+    if (highlights.isNotEmpty) {
+      builder.line('');
+      builder.line('<b>Самое заметное</b>');
+      for (final change in highlights) {
+        final item = change.item.trim();
+        builder.line(
+          '${_arrow(change.impact)} ${escapeHtml(_highlightLabel(change, translations))}'
+          '${item.isEmpty ? '' : ' (${escapeHtml(item)})'}: '
+          '${escapeHtml(change.beforeText)} → ${escapeHtml(change.afterText)}',
+        );
+      }
+      final rest = stats.length - highlights.length;
+      if (rest > 0) {
+        builder.line(
+          '<i>…и ещё $rest '
+          '${_plural(rest, 'изменение', 'изменения', 'изменений')}.</i>',
+        );
+      }
+    }
+  } else {
+    // Патч без цифр: пара заголовков, чтобы было понятно, о чём речь.
+    final bullets = _textBullets(patch, translations, 4);
+    if (bullets.isNotEmpty) {
+      builder.line('');
+      for (final bullet in bullets) {
+        builder.line('• ${escapeHtml(bullet)}');
+      }
+    }
+  }
+
+  builder.line('');
+  final app = appUrl.trim();
+  if (app.isNotEmpty) {
+    final total = stats.isEmpty
+        ? 'Весь патч'
+        : 'Все ${stats.length} ${_plural(stats.length, 'изменение', 'изменения', 'изменений')}';
+    builder.line('📱 <b>$total — в нашем приложении</b>');
+    builder.line(
+      stats.isEmpty
+          ? 'Там полная информация: все пункты патча, поиск и фильтры '
+              'по разделам.'
+          : 'Там полная информация: цифры «было → стало» с подсветкой, '
+              'фильтры по оружию и специализациям, поиск по предмету.',
+    );
+    builder.line('👉 <a href="${escapeHtml(app)}">Открыть патчноуты THE FINALS</a>');
+  } else {
+    builder.line(
+      '<a href="${escapeHtml(patch.url)}">Читать полностью на reachthefinals.com</a>',
+    );
+  }
+
+  return builder.build();
+}
+
 /// Текстовая версия дайджеста для патчей без числовых изменений.
 ///
 /// Показываем заголовки и пункты, но пропускаем длинные вступления
@@ -348,6 +448,111 @@ List<String> renderFull(
   builder.line('');
   builder.line('<a href="${escapeHtml(patch.url)}">Источник: reachthefinals.com</a>');
   return builder.build();
+}
+
+/// Название характеристики: словарь точнее машинного перевода на коротких
+/// строках («damage» — это «урон», а не «повреждать»).
+String _statLabel(StatChange change, Map<String, String> translations) {
+  final dictionary = translateStatName(change.stat);
+  return dictionary != change.stat
+      ? dictionary
+      : _translated(translations, change.stat);
+}
+
+/// Несколько самых заметных изменений.
+///
+/// Сначала смотрим на то, что игроку важнее всего: оружие, гаджеты,
+/// специализации и классы. Карты и режимы идут вторым эшелоном - там
+/// встречаются правки вроде «здоровье лестниц», которые по процентам
+/// обгоняют всё остальное, но в анонсе выглядят странно.
+List<StatChange> _topChanges(List<StatChange> stats, int limit) {
+  final primary = _pick(stats.where((change) => _isKeyCategory(change.category)), limit);
+  if (primary.length >= limit) return primary;
+
+  final picked = primary.map((change) => change.item).toSet();
+  final rest = stats.where((change) => !picked.contains(change.item));
+  return [...primary, ..._pick(rest, limit - primary.length)];
+}
+
+List<StatChange> _pick(Iterable<StatChange> stats, int limit) {
+  final scored = [...stats]..sort((a, b) => _weight(b).compareTo(_weight(a)));
+  final seen = <String>{};
+  final result = <StatChange>[];
+  for (final change in scored) {
+    final item = change.item.trim();
+    // Один предмет - одна строка: иначе три правки одного оружия вытеснят
+    // всё остальное.
+    if (!seen.add(item.isEmpty ? change.stat : item)) continue;
+    result.add(change);
+    if (result.length >= limit) break;
+  }
+  return result;
+}
+
+bool _isKeyCategory(String category) {
+  final value = category.toLowerCase();
+  return value.contains('weapon') ||
+      value.contains('gadget') ||
+      value.contains('specialization') ||
+      value.contains('archetype') ||
+      value.contains('оруж') ||
+      value.contains('гаджет') ||
+      value.contains('специализац') ||
+      value.contains('класс');
+}
+
+double _weight(StatChange change) {
+  final base = change.before.abs() < 1 ? 1.0 : change.before.abs();
+  // Ограничиваем сверху: рост «в 5 раз» у мелкой цифры не должен
+  // перекрывать заметные правки.
+  final score = (change.delta.abs() / base).clamp(0.0, 3.0);
+  return change.item.trim().isEmpty ? score * 0.6 : score.toDouble();
+}
+
+/// Короткая подпись для анонса: без хвоста «увеличено.», без длинных
+/// пояснений из парсера.
+String _highlightLabel(StatChange change, Map<String, String> translations) {
+  var label = _statLabel(change, translations).trim();
+  final dot = label.indexOf('. ');
+  if (dot > 20) label = label.substring(0, dot);
+  // Парсер иногда затягивает в название характеристики хвост фразы:
+  // «Здоровье купольного щита увеличено.». В анонсе это лишнее.
+  label = label.replaceFirst(RegExp(r'[.!]+$'), '');
+  label = label.replaceFirst(
+    RegExp(
+      r'\s+(увеличено|уменьшено|повышено|снижено|усилено|ослаблено|'
+      r'increased|decreased|reduced)$',
+      caseSensitive: false,
+    ),
+    '',
+  );
+  if (label.isNotEmpty && label[0] == label[0].toLowerCase()) {
+    label = label[0].toUpperCase() + label.substring(1);
+  }
+  return _shorten(label, 64);
+}
+
+/// Короткие пункты для патчей без числовых изменений.
+List<String> _textBullets(
+  PatchDoc patch,
+  Map<String, String> translations,
+  int limit,
+) {
+  final result = <String>[];
+  for (final section in patch.sections) {
+    for (final block in section.blocks) {
+      if (result.length >= limit) return result;
+      if (block.kind != 'li' && block.kind != 'b' && block.kind != 'h3') continue;
+      final text = _translated(translations, block.text).trim();
+      if (text.length < 12 || text.length > 160 || _isDate(text)) continue;
+      if (_isHeadingLike(block.text)) continue;
+      // Одиночное слово — это подпись раздела («Specialization»),
+      // а не изменение: в анонсе она только путает.
+      if (!text.contains(' ')) continue;
+      result.add(text);
+    }
+  }
+  return result;
 }
 
 String _translated(Map<String, String> translations, String source) {
