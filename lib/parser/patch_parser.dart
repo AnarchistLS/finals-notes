@@ -28,9 +28,7 @@ Future<List<Map<String, dynamic>>> fetchItemsPage({
   final uri = Uri.parse(
     '$apiBase/patchnotes?format=json${offset == null ? '' : '&offset=$offset'}',
   );
-  final response = await client
-      .get(uri, headers: {'Accept': 'application/json'})
-      .timeout(const Duration(seconds: 25));
+  final response = await _getWithRetry(client, uri);
 
   if (response.statusCode != 200) {
     throw HttpException(
@@ -45,6 +43,35 @@ Future<List<Map<String, dynamic>>> fetchItemsPage({
   final items = decoded['items'];
   if (items is! List) return const [];
   return items.cast<Map<String, dynamic>>();
+}
+
+/// Запрос с повторами: сайт изредка отвечает 5xx или не укладывается в
+/// таймаут, и из-за одного такого сбоя пропадал целый запуск.
+Future<http.Response> _getWithRetry(
+  http.Client client,
+  Uri uri, {
+  int attempts = 3,
+}) async {
+  Object? lastError;
+  for (var attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      final response = await client
+          .get(uri, headers: {'Accept': 'application/json'})
+          .timeout(const Duration(seconds: 25));
+      if (response.statusCode < 500 && response.statusCode != 429) {
+        return response;
+      }
+      lastError = HttpException('Сайт ответил ${response.statusCode}.');
+    } on Exception catch (error) {
+      lastError = error;
+    }
+    if (attempt < attempts) {
+      await Future<void>.delayed(Duration(seconds: attempt * 3));
+    }
+  }
+  throw lastError is Exception
+      ? lastError
+      : const HttpException('Не удалось получить ответ сайта.');
 }
 
 /// Загружает несколько страниц списка и разбирает их в [PatchDoc].
