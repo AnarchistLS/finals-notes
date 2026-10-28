@@ -75,6 +75,9 @@ jobs:
         run: dart run tool/bot.dart --once --init
 
       - name: Данные для Mini App
+        # Даже если пост в канал не ушёл, приложение должно получить свежие
+        # данные: бот повторит публикацию на следующем запуске.
+        if: always()
         env:
           TRANSLATE_BACKEND: deepl
           DEEPL_KEY: ${{ secrets.DEEPL_KEY }}
