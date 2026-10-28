@@ -37,6 +37,8 @@ jobs:
   update:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
 
     steps:
       - uses: actions/checkout@v4
@@ -80,6 +82,7 @@ jobs:
         run: dart run tool/publish.dart
 
       - name: Коммит данных
+        id: commit
         # Даже если пост упал, состояние и кеш стоит сохранить: иначе
         # следующий запуск попробует опубликовать тот же патч ещё раз.
         if: always()
@@ -89,6 +92,7 @@ jobs:
           git add -A web/data tool
           if git diff --cached --quiet; then
             echo "Изменений нет"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git commit -m "data: патчи на $(date -u +%Y-%m-%dT%H:%MZ)"
@@ -96,6 +100,7 @@ jobs:
           # правка кода). Тогда push отклоняется - подтягиваем и пробуем снова.
           for attempt in 1 2 3; do
             if git push; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             echo "push не прошёл, подтягиваю изменения (попытка $attempt)"
@@ -126,7 +131,9 @@ jobs:
   # GITHUB_TOKEN и сам по себе другие workflow не запускает.
   deploy:
     needs: update
-    if: always()
+    # Сборка Flutter занимает пару минут, поэтому запускаем её только когда
+    # данные реально изменились (или при первом наполнении).
+    if: needs.update.outputs.changed == 'true'
     permissions:
       contents: read
       pages: write

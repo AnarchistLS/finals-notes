@@ -156,10 +156,13 @@ Cloudflare Pages: провайдеры в России блокируют `*.pag
 - `patches_ru.json` перезаписывается только когда патчи или переводы реально
   изменились: иначе файл менялся бы каждые 15 минут, а каждый коммит запускал
   бы сборку и деплой.
-- Расписание — раз в 15 минут. У публичного репозитория минуты Actions
-  бесплатны и безлимитны, так что частые проверки ничего не стоят. Если
-  репозиторий снова станет приватным, верните `'23 */2 * * *'`: 2000 минут в
-  месяц на 15-минутные запуски не хватит.
+- Расписание GitHub — раз в 10 минут, но сам GitHub выполняет его примерно
+  раз в 40 минут (троттлинг планировщика). Поэтому частые проверки — каждые
+  15 минут — делает внешний cron-job.org: он вызывает `workflow_dispatch`
+  через API. Расписание GitHub остаётся страховкой на случай, если внешний
+  cron перестанет работать.
+- Деплой сайта запускается только когда данные реально изменились, иначе
+  каждые 15 минут впустую собиралась бы Flutter-сборка.
 - GitHub отключает расписание в публичном репозитории после 60 дней без
   коммитов, поэтому раз в месяц workflow сам коммитит `tool/.last-run`.
 
@@ -201,6 +204,38 @@ Cloudflare Pages: провайдеры в России блокируют `*.pag
 
 Если `github.io` окажется медленным, привяжите свой домен (Settings → Pages →
 Custom domain): приложению всё равно, откуда читать `data/patches_ru.json`.
+
+### Внешний cron (каждые 15 минут)
+
+GitHub выполняет `schedule` не чаще ~40 минут, поэтому частоту задаёт
+cron-job.org: он раз в 15 минут дёргает API GitHub и запускает
+«Обновление патчей». Токен живёт только в cron-job.org, прав на код у него
+нет — только на запуск workflow.
+
+1. GitHub → Settings → Developer settings → Personal access tokens →
+   **Fine-grained tokens** → Generate new token:
+   - Resource owner: `AnarchistLS`
+   - Repository access: **Only select repositories** → `finals-notes`
+   - Permissions → Repository permissions → **Actions: Read and write**
+   - Expiration: 1 год
+   Скопируйте токен (`github_pat_…`).
+2. Зарегистрируйтесь на https://cron-job.org и подтвердите почту.
+3. Create cronjob:
+   - Title: `finals-notes update`
+   - URL: `https://api.github.com/repos/AnarchistLS/finals-notes/actions/workflows/update.yml/dispatches`
+   - Schedule: every 15 minutes (`*/15 * * * *`)
+   - Advanced → Request method: `POST`
+   - Headers:
+     `Authorization: Bearer github_pat_…`,
+     `Accept: application/vnd.github+json`,
+     `X-GitHub-Api-Version: 2022-11-28`,
+     `Content-Type: application/json`
+   - Request body: `{"ref":"main"}`
+   - Notifications: включите письмо при ошибке.
+4. «Test run»: в ответе должно быть `204`, а в Actions — новый запуск
+   «Обновление патчей» с типом `workflow_dispatch`.
+5. Когда убедились, что работает, расписание GitHub можно сделать редким
+   (`0 */3 * * *`) — оно останется страховкой.
 
 ### Локальная проверка
 
