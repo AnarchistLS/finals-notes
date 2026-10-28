@@ -57,6 +57,17 @@ void main() {
       expect(change.impact, Impact.nerf);
     });
 
+    test('абзац с запятой перед числом не становится характеристикой', () {
+      final result = parseStatChanges(
+        'At the other end of the scale, teams with one or more Heavies tended '
+        'to see a slight decrease in cohesion, around 0.5% to 1%, due to the '
+        'increased Heavy movement speed.',
+        category: 'Maps',
+        item: '',
+      );
+      expect(result, isEmpty);
+    });
+
     test('время перезарядки вниз — усиление', () {
       final change = one('Decreased duration of the reload animation from 2.2s to 1.75s');
       expect(change.impact, Impact.buff);

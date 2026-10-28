@@ -31,6 +31,32 @@ void main() {
       expect(result, contains('ARN-220'));
       expect(result, contains('размер магазина'));
     });
+
+    test('словарь важнее машинного перевода', () {
+      expect(displayStatName('damage', {'damage': 'повреждать'}), 'Урон');
+      expect(
+        displayStatName(
+          'reload loop animation',
+          {'reload loop animation': 'анимация цикла перезагрузки'},
+        ),
+        'Анимация цикла перезарядки',
+      );
+      expect(
+        displayStatName('smoke duration', {'smoke duration': 'продолжительность курения'}),
+        'Длительность дыма',
+      );
+    });
+
+    test('подпись для интерфейса без хвоста прозы и с заглавной', () {
+      expect(
+        displayStatName(
+          'Dome Shield health increased',
+          {'Dome Shield health increased': 'Здоровье купольного щита увеличено.'},
+        ),
+        'Здоровье купольного щита',
+      );
+      expect(displayStatName('base damage'), 'Базовый урон');
+    });
   });
 
   group('Заголовки', () {

@@ -180,6 +180,33 @@ String translateTitle(String input) {
 
 /// Словарь терминов. Порядок важен: сначала длинные фразы.
 const List<List<String>> _statTerms = [
+  // Фразы целиком: машинный перевод путает «reload» с перезагрузкой,
+  // а «environmental health» — с экологией.
+  ['duration of empty and tactical reload', 'длительность пустой и тактической перезарядки'],
+  ['delay until health regeneration kicks in after last taking damage', 'задержка регенерации здоровья после урона'],
+  ['flash intensity threshold to display a hitmarker', 'порог интенсивности вспышки для метки попадания'],
+  ['maximum intensity of flashes on teammates', 'макс. интенсивность вспышек по союзникам'],
+  ['width of the weapon’s hit box', 'ширина хитбокса оружия'],
+  ['height of the weapon’s hit box', 'высота хитбокса оружия'],
+  ['time it takes for Vaults to open', 'время открытия хранилища'],
+  ['environmental health of ladders', 'прочность лестниц'],
+  ['duration of the Backstab attack', 'длительность атаки «Удар в спину»'],
+  ['base damage of the Backstab', 'базовый урон «Удара в спину»'],
+  ['Vault spawn preview duration', 'длительность предпросмотра появления хранилища'],
+  ['Arena bridge opening speed', 'скорость открытия моста Арены'],
+  ['damage falloff max range', 'макс. дальность спада урона'],
+  ['damage falloff minimum range', 'мин. дальность спада урона'],
+  ['damage falloff multiplier', 'множитель спада урона'],
+  ['damage fall-off multiplier', 'множитель спада урона'],
+  ['damage for precise hits', 'урон при точных попаданиях'],
+  ['fuse time before detonations', 'время до детонации'],
+  ['reload loop animation', 'анимация цикла перезарядки'],
+  ['reload intro animation', 'анимация вступления перезарядки'],
+  ['healing per second', 'лечение в секунду'],
+  ['health given per shot', 'здоровье за выстрел'],
+  ['base damage', 'базовый урон'],
+  ['explosive damage', 'урон от взрыва'],
+  ['gas duration', 'длительность газа'],
   ['time to kill', 'время до убийства'],
   ['rate of fire', 'скорострельность'],
   ['damage per shot', 'урон за выстрел'],
@@ -397,6 +424,35 @@ String translateStatName(String input) {
 String _dropArticle(String text) =>
     text.trim().replaceFirst(RegExp(r'^the\s+', caseSensitive: false), '');
 
+/// Название характеристики для показа в интерфейсе.
+///
+/// Сначала словарь: он знает, что «damage» — это «урон», а не «повреждать»,
+/// и что «reload» — «перезарядка», а не «перезагрузка». Машинный перевод
+/// остаётся запасным вариантом для фраз, которых в словаре нет.
+String displayStatName(
+  String stat, [
+  Map<String, String> translations = const {},
+]) {
+  final dictionary = translateStatName(stat);
+  var label = (dictionary != stat ? dictionary : (translations[stat] ?? stat))
+      .trim();
+  // Хвосты из прозы: «Здоровье купольного щита увеличено.».
+  label = label.replaceFirst(RegExp(r'[.!]+$'), '');
+  label = label.replaceFirst(
+    RegExp(
+      r'\s+(увеличено|уменьшено|повышено|снижено|усилено|ослаблено|'
+      r'increased|decreased|reduced)$',
+      caseSensitive: false,
+    ),
+    '',
+  );
+  label = label.replaceFirst(RegExp(r'[.!]+$'), '');
+  if (label.isNotEmpty && label[0] == label[0].toLowerCase()) {
+    label = label[0].toUpperCase() + label.substring(1);
+  }
+  return label;
+}
+
 /// Переводит фразу по словарю. `null`, если словарь не знает фразу целиком.
 String? _translateWords(String mixed) {
   final lookup = _normalizeForLookup(mixed);
@@ -410,7 +466,7 @@ String? _translateWords(String mixed) {
   final core = words.length > 1 && _modifiers.contains(words.first)
       ? words.sublist(1).join(' ')
       : lookup;
-  if (!_termKeys.contains(core)) return null;
+  if (!_termKeys.contains(lookup) && !_termKeys.contains(core)) return null;
 
   var result = mixed;
 

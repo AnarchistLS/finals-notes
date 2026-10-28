@@ -158,6 +158,12 @@ bool _looksLikeUnit(String unit) {
 bool _looksLikeProse(String line, double before, double after) {
   if (line.length > 240) return true;
   if (RegExp(r'[$€£]').hasMatch(line)) return true;
+  // Запятая перед первым числом — это абзац, а не характеристика:
+  // «…a slight decrease in cohesion, around 0.5% to 1%…».
+  final firstDigit = line.indexOf(RegExp(r'\d'));
+  if (firstDigit > 0 && line.substring(0, firstDigit).contains(',')) {
+    return true;
+  }
   if (before >= 1000 && after >= 1000) return true;
   if (RegExp(
     r'\b(january|february|march|april|may|june|july|august|september|october|november|december)\b',

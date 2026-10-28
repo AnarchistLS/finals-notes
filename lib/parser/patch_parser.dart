@@ -140,7 +140,7 @@ PatchDoc parsePatchItem(Map<String, dynamic> item, {String apiBase = defaultApiB
     // Параграф внутри пункта списка дублирует текст — пропускаем.
     if (tag == 'p' && element.parent?.localName == 'li') continue;
 
-    final text = _normalize(element.text);
+    final text = _ownText(element);
     if (text.isEmpty) continue;
 
     switch (tag) {
@@ -242,6 +242,35 @@ void _stripNoise(DocumentFragment fragment) {
 
 String _normalize(String input) =>
     input.replaceAll(RegExp(r'[\u00a0\s]+'), ' ').trim();
+
+/// Текст самого элемента без вложенных списков и заголовков.
+///
+/// Squarespace вкладывает подсписки в `<li>`, а `element.text` склеивает
+/// строки без пробела: «…tactical reloadDecrease reload intro animation…».
+/// Вложенные `<li>` разбираются отдельными итерациями, поэтому здесь их
+/// пропускаем.
+String _ownText(Element element) {
+  final buffer = StringBuffer();
+
+  void walk(Node node) {
+    for (final child in node.nodes) {
+      if (child is Element) {
+        final name = child.localName ?? '';
+        if (const {
+          'li', 'ul', 'ol', 'h1', 'h2', 'h3', 'h4', 'img', 'figure',
+        }.contains(name)) {
+          continue;
+        }
+        walk(child);
+      } else if (child is Text) {
+        buffer.write(child.text);
+      }
+    }
+  }
+
+  walk(element);
+  return _normalize(buffer.toString());
+}
 
 /// Убирает HTML-сущности: «HOTFIX &amp; UPCOMING FIXES».
 String decodeEntities(String input) {
