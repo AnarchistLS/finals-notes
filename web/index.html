@@ -31,6 +31,7 @@
 
   <title>THE FINALS — патчноуты</title>
   <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="splash/splash.css">
 
   <!-- Telegram Mini App SDK.
        Грузим асинхронно: у части провайдеров telegram.org недоступен, и
@@ -50,12 +51,6 @@
         // В полноэкранном режиме свайп вниз закрывает приложение - отключаем,
         // чтобы он не мешал листать длинные патчноуты.
         if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
-
-        var insets = tg.contentSafeAreaInset || { top: 0, bottom: 0 };
-        var splash = document.getElementById('splash');
-        if (splash) {
-          splash.style.padding = (insets.top || 0) + 'px 0 ' + (insets.bottom || 0) + 'px';
-        }
       } catch (e) {
         // Старый клиент Telegram: просто работаем как обычная веб-страница.
       }
@@ -73,47 +68,31 @@
       overflow: hidden;
       -webkit-tap-highlight-color: transparent;
     }
-
-    /* Заставка, пока грузится CanvasKit. Убираем её по первому кадру Flutter. */
-    #splash {
-      position: fixed;
-      inset: 0;
-      z-index: 10;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      background: #08080C;
-      color: #F5F6FA;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-      transition: opacity 0.22s ease;
-    }
-
-    #splash-title {
-      font-size: 13px;
-      letter-spacing: 5px;
-      font-weight: 700;
-      color: #E4FF3F;
-    }
-
-    #splash-sub {
-      font-size: 15px;
-      color: #9AA0B4;
-      animation: splash-pulse 1.6s ease-in-out infinite;
-    }
-
-    @keyframes splash-pulse {
-      0%, 100% { opacity: 0.45; }
-      50% { opacity: 1; }
-    }
   </style>
 </head>
 <body>
-  <div id="splash">
-    <div id="splash-title">THE FINALS</div>
-    <div id="splash-sub">Патчноуты · загрузка</div>
+  <!-- Заставка: анимация лого DARKSIDE, пока грузится CanvasKit.
+       Разметка и стили — web/splash/, логика — web/splash/splash.js. -->
+  <div id="splash" aria-hidden="true">
+    <div id="stage">
+      <div id="logoGroup">
+        <canvas id="logoBase" width="640" height="640"></canvas>
+        <canvas id="logo" width="640" height="640"></canvas>
+        <canvas id="trail" width="640" height="640"></canvas>
+        <div id="glint">
+          <div class="halo"></div>
+          <div class="flare h"></div>
+          <div class="flare v"></div>
+          <div class="core"></div>
+        </div>
+      </div>
+      <div id="title">DARKSIDE</div>
+      <div id="subtitle">by Anarchist</div>
+      <div id="hint"></div>
+    </div>
   </div>
+
+  <script src="splash/splash.js"></script>
 
   <script>
     // Если SDK успел загрузиться из кеша до этого места - инициализируемся.
@@ -123,6 +102,12 @@
       // SDK мог догрузиться уже после старта приложения.
       window.finalsTelegramInit();
 
+      // Заставка сама решит, когда уходить: на первом входе даст
+      // логотипу проявиться, на повторном — уберётся почти сразу.
+      if (window.finalsSplash) {
+        window.finalsSplash.finish();
+        return;
+      }
       var splash = document.getElementById('splash');
       if (!splash) return;
       splash.style.opacity = '0';
