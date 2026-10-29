@@ -72,23 +72,16 @@
 </head>
 <body>
   <!-- Заставка: анимация лого DARKSIDE, пока грузится CanvasKit.
-       Разметка и стили — web/splash/, логика — web/splash/splash.js. -->
+       Разметка и стили — web/splash/, логика — web/splash/splash.js.
+       Единая canvas-сцена: планета, след и блик рисуются в одной
+       системе координат, поэтому блик не может уехать с планеты. -->
   <div id="splash" aria-hidden="true">
     <div id="stage">
       <div id="logoGroup">
-        <canvas id="logoBase" width="640" height="640"></canvas>
-        <canvas id="logo" width="640" height="640"></canvas>
-        <canvas id="trail" width="640" height="640"></canvas>
-        <div id="glint">
-          <div class="halo"></div>
-          <div class="flare h"></div>
-          <div class="flare v"></div>
-          <div class="core"></div>
-        </div>
+        <canvas id="scene" width="640" height="640"></canvas>
       </div>
       <div id="title">DARKSIDE</div>
       <div id="subtitle">by Anarchist</div>
-      <div id="hint"></div>
     </div>
   </div>
 

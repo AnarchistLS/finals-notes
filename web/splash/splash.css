@@ -1,6 +1,10 @@
-/* Заставка Mini App: анимация лого DARKSIDE.
+/* Заставка Mini App: единая canvas-сцена (порт mini-app/loading.html).
+   Раньше блик был DOM-элементом поверх canvas — при масштабировании и
+   devicePixelRatio он уезжал и «плыл» относительно планеты. Теперь
+   планета, световое проявление, след и блик рисуются в одной canvas
+   640×640, поэтому геометрия не может разъехаться в принципе.
    Оверлей живёт поверх Flutter, пока не отрисуется первый кадр.
-   Все селекторы привязаны к #splash, чтобы не задевать само приложение. */
+   Жизненный цикл — в web/splash/splash.js (в конце файла). */
 
 @font-face {
   font-family: 'Josefin Sans';
@@ -50,88 +54,11 @@
   transform-origin: center center;
 }
 
-/* --- Слой 1: вся картинка медленно «набирает свет» --- */
-#splash #logoBase {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  filter: brightness(1);
+/* --- Единая canvas-сцена: планета + блик в одном координатном пространстве --- */
+#splash #scene {
   display: block;
-}
-
-/* --- Слой 2: мягкий световой фронт, идущий слева направо --- */
-#splash #logo {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  --a: -76;
-  --b: 0;
-  -webkit-mask-image: linear-gradient(90deg, #000 calc(var(--a) * 1%), transparent calc(var(--b) * 1%));
-          mask-image: linear-gradient(90deg, #000 calc(var(--a) * 1%), transparent calc(var(--b) * 1%));
-  -webkit-mask-repeat: no-repeat;
-          mask-repeat: no-repeat;
-  display: block;
-}
-
-/* --- Блик (комета) --- */
-#splash #glint {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 0;
-  height: 0;
-  opacity: 0;
-  pointer-events: none;
-  will-change: transform, opacity;
-}
-#splash #glint .halo {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 88px;
-  height: 88px;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(circle closest-side,
-    rgba(255, 160, 205, 0.10) 0%,
-    rgba(255, 160, 205, 0.04) 45%,
-    rgba(255, 160, 205, 0) 100%);
-  filter: blur(3px);
-}
-#splash #glint .core {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 38px;
-  height: 38px;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(circle closest-side,
-    #fff 0%, #fff 12%,
-    rgba(255, 236, 245, .92) 30%,
-    rgba(255, 175, 210, .5) 55%,
-    rgba(255, 175, 210, 0) 100%);
-  filter: blur(0.4px);
-}
-#splash #glint .flare {
-  position: absolute;
-  left: 0;
-  top: 0;
-  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.8) 50%, transparent 100%);
-  filter: blur(1.2px);
-}
-#splash #glint .flare.h { width: 118px; height: 2.4px; transform: translate(-50%, -50%) rotate(-18deg); }
-#splash #glint .flare.v { width: 84px;  height: 2.8px; transform: translate(-50%, -50%) rotate(72deg); opacity: .9; }
-
-/* --- След блика (мазок кисти) --- */
-#splash #trail {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  pointer-events: none;
-  will-change: opacity;
+  width: 640px;
+  height: 640px;
 }
 
 #splash #logoGroup {
@@ -140,7 +67,7 @@
   will-change: transform;
 }
 
-/* --- Надпись DARKSIDE: хром-текстура планеты, шрифт Josefin Sans (700) --- */
+/* --- Надпись DARKSIDE: хром-текстура планеты, шрифт Allerta Stencil --- */
 #splash #title {
   position: absolute;
   left: 0;
@@ -214,8 +141,4 @@
   color: #9a9a9a;
   opacity: 0;
   will-change: opacity, transform;
-}
-
-#splash #hint {
-  display: none; /* в загрузочном экране подсказки не нужны */
 }
