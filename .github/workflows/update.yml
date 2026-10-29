@@ -63,6 +63,11 @@ jobs:
       - name: Зависимости
         run: flutter pub get
 
+      # ffmpeg нужен боту: из зацикленного видео патча он собирает «гифку»
+      # для канала. В свежих образах ubuntu-раннеров пакета нет.
+      - name: ffmpeg
+        run: sudo apt-get install -y -qq ffmpeg
+
       - name: Пост в канал
         if: ${{ !inputs.init }}
         env:
