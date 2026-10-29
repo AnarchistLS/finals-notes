@@ -289,9 +289,15 @@ Future<void> _runOnce({
     }
   }
 
-  state.lastPatchId = patch.id;
-  state.lastPostedAt = DateTime.now().toIso8601String();
-  await state.save(stateFile);
+  // Состояние обновляем только для «текущего» патча: точечная публикация
+  // по --patch не должна переписывать память о последнем опубликованном,
+  // иначе следующий обычный запуск сочтёт свежий патч неопубликованным
+  // и отпостит его повторно.
+  if (config.patchId == null) {
+    state.lastPatchId = patch.id;
+    state.lastPostedAt = DateTime.now().toIso8601String();
+    await state.save(stateFile);
+  }
   _log('готово: ${patch.title}');
 }
 

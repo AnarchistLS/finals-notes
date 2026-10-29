@@ -19,6 +19,10 @@ on:
         description: 'Опубликовать патч заново, даже если он уже был'
         type: boolean
         default: false
+      patch:
+        description: 'Опубликовать конкретный патч (id из --list, напр. 11-110)'
+        type: string
+        default: ''
 
 # Один запуск за раз: два обновления одновременно писали бы в одни файлы.
 concurrency:
@@ -69,7 +73,7 @@ jobs:
           # Ссылка на Mini App. По умолчанию - короткий адрес нашего бота,
           # чтобы кнопка работала и без настройки variable.
           MINIAPP_URL: ${{ vars.MINIAPP_URL || 'https://t.me/finals_notes_bot/app' }}
-        run: dart run tool/bot.dart --once ${{ inputs.force && '--force' || '' }}
+        run: dart run tool/bot.dart --once ${{ inputs.force && '--force' || '' }} ${{ inputs.patch && format('--patch={0}', inputs.patch) || '' }}
 
       - name: Запомнить текущий патч
         if: ${{ inputs.init }}
