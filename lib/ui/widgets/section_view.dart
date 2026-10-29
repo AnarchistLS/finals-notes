@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../l10n/glossary.dart';
 import '../../models/models.dart';
 import '../theme.dart';
+import 'stat_tile.dart';
 
 /// Рендерит один раздел статьи: заголовки, пункты, абзацы и картинки.
 /// Числовые изменения внутри текста подсвечиваются зелёным/красным.
@@ -36,7 +37,8 @@ class SectionView extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     color: AppColors.tape,
                     child: Text(
                       translateHeading(section.title).toUpperCase(),
@@ -50,7 +52,10 @@ class SectionView extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Container(height: 1, width: double.infinity, color: AppColors.textPrimary.withAlpha(60)),
+                  Container(
+                      height: 1,
+                      width: double.infinity,
+                      color: AppColors.textPrimary.withAlpha(60)),
                 ],
               ),
             ),
@@ -74,21 +79,42 @@ class SectionView extends StatelessWidget {
               Expanded(
                 child: Text(
                   translateHeading(block.text),
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w700),
                 ),
               ),
             ],
           ),
         );
       case 'b':
-        return Padding(
-          padding: const EdgeInsets.only(top: 12, bottom: 4),
-          child: Text(
-            translations[block.text] ?? block.text,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-          ),
+        // Предмет из текста патча. Если по нему есть числовые изменения,
+        // показываем сразу его тайлы статов — «заголовок + карточки»,
+        // как на постах Darkside.
+        final itemStats =
+            stats.where((c) => c.item == block.text).toList(growable: false);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 12, bottom: 4),
+              child: Text(
+                translations[block.text] ?? block.text,
+                style:
+                    const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+            ),
+            if (itemStats.isNotEmpty) ...[
+              for (final change in itemStats)
+                StatTile(change: change, translations: translations),
+            ],
+          ],
         );
       case 'li':
+        // Строки-пункты, которые уже показаны тайлами статов над ними,
+        // дублировать текстом не нужно.
+        if (stats.any((c) => c.raw == block.text)) {
+          return const SizedBox.shrink();
+        }
         return Padding(
           padding: const EdgeInsets.only(bottom: 7),
           child: Row(
@@ -100,7 +126,8 @@ class SectionView extends StatelessWidget {
                   width: 5,
                   height: 5,
                   child: DecoratedBox(
-                    decoration: BoxDecoration(color: AppColors.textDim, shape: BoxShape.circle),
+                    decoration: BoxDecoration(
+                        color: AppColors.textDim, shape: BoxShape.circle),
                   ),
                 ),
               ),
@@ -123,9 +150,9 @@ class SectionView extends StatelessWidget {
         if (url == null) return const SizedBox.shrink();
         // Картинки в патче бывают по 1500+ px. Декодируем под ширину экрана,
         // иначе каждая занимает десятки мегабайт памяти и скролл проседает.
-        final decodeWidth =
-            ((MediaQuery.sizeOf(context).width - 32) * MediaQuery.devicePixelRatioOf(context))
-                .round();
+        final decodeWidth = ((MediaQuery.sizeOf(context).width - 32) *
+                MediaQuery.devicePixelRatioOf(context))
+            .round();
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 10),
           child: ClipRRect(
@@ -145,7 +172,8 @@ class SectionView extends StatelessWidget {
                     child: SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textDim),
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.textDim),
                     ),
                   ),
                 );
@@ -194,7 +222,8 @@ class HighlightedText extends StatelessWidget {
   Widget build(BuildContext context) {
     final source = sourceText ?? text;
     final base = style ??
-        const TextStyle(fontSize: 14, height: 1.55, color: AppColors.textPrimary);
+        const TextStyle(
+            fontSize: 14, height: 1.55, color: AppColors.textPrimary);
 
     final applicable = changes.where((c) {
       if (c.raw != source) return false;
@@ -210,9 +239,11 @@ class HighlightedText extends StatelessWidget {
     if (applicable.isEmpty) return Text(text, style: base);
 
     if (source == text) {
-      return Text.rich(TextSpan(style: base, children: _rangedSpans(applicable)));
+      return Text.rich(
+          TextSpan(style: base, children: _rangedSpans(applicable)));
     }
-    return Text.rich(TextSpan(style: base, children: _numericSpans(applicable)));
+    return Text.rich(
+        TextSpan(style: base, children: _numericSpans(applicable)));
   }
 
   List<TextSpan> _rangedSpans(List<StatChange> applicable) {
@@ -221,11 +252,13 @@ class HighlightedText extends StatelessWidget {
     for (final change in applicable) {
       if (change.highlightStart < cursor) continue;
       if (change.highlightStart > cursor) {
-        spans.add(TextSpan(text: text.substring(cursor, change.highlightStart)));
+        spans
+            .add(TextSpan(text: text.substring(cursor, change.highlightStart)));
       }
       spans.add(TextSpan(
         text: text.substring(change.highlightStart, change.highlightEnd),
-        style: TextStyle(color: impactColor(change.impact), fontWeight: FontWeight.w700),
+        style: TextStyle(
+            color: impactColor(change.impact), fontWeight: FontWeight.w700),
       ));
       cursor = change.highlightEnd;
     }

@@ -149,6 +149,24 @@ class _PatchPageState extends State<PatchPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Статы, привязавшиеся к блокам внутри разделов, рисует SectionView.
+    // В отдельном блоке наверху остаются только те, чей предмет и строка
+    // не найдены ни в одном разделе — иначе карточки дублируются.
+    final sectionItems = {
+      for (final section in patch.sections)
+        for (final block in section.blocks)
+          if (block.kind == 'b') block.text,
+    };
+    final sectionRaws = {
+      for (final section in patch.sections)
+        for (final block in section.blocks)
+          if (block.kind == 'li') block.text,
+    };
+    final loose = patch.stats
+        .where((s) =>
+            !sectionItems.contains(s.item) && !sectionRaws.contains(s.raw))
+        .toList();
+
     return Scaffold(
       body: CustomScrollView(
         slivers: [
@@ -164,8 +182,8 @@ class _PatchPageState extends State<PatchPage> {
             flexibleSpace: FlexibleSpaceBar(background: _hero(context)),
           ),
           SliverToBoxAdapter(child: _meta(context)),
-          if (patch.stats.isNotEmpty)
-            SliverToBoxAdapter(child: _statsBlock(context)),
+          if (loose.isNotEmpty)
+            SliverToBoxAdapter(child: _statsBlock(context, loose)),
           for (final section in patch.sections)
             SliverToBoxAdapter(
               // Раздел — это готовая колонка текста. Без границы отрисовки при
@@ -351,41 +369,44 @@ class _PatchPageState extends State<PatchPage> {
     );
   }
 
-  Widget _statsBlock(BuildContext context) {
+  Widget _statsBlock(BuildContext context, List<StatChange> stats) {
     final groups = <String, List<StatChange>>{};
-    for (final stat in patch.stats) {
+    for (final stat in stats) {
       groups.putIfAbsent(stat.groupKey, () => <StatChange>[]).add(stat);
     }
+    final buffCount = stats.where((s) => s.impact == Impact.buff).length;
+    final nerfCount = stats.where((s) => s.impact == Impact.nerf).length;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              // Белая плашка-маркер «❙» как у Darkside.
-              Container(width: 4, height: 18, color: AppColors.textPrimary),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Text(
-                  'ИЗМЕНЕНИЯ ХАРАКТЕРИСТИК',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.4),
-                ),
+          // Тот же «пирожок-лента», что и у разделов статьи.
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            color: AppColors.tape,
+            child: const Text(
+              'ИЗМЕНЕНИЯ ХАРАКТЕРИСТИК',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                fontStyle: FontStyle.italic,
+                letterSpacing: 0.8,
+                color: Colors.black,
               ),
-              Text(
-                '▲ ${patch.buffCount}   ▼ ${patch.nerfCount}',
-                style: const TextStyle(fontSize: 12, color: AppColors.textDim),
-              ),
-            ],
+            ),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Зелёный — показатель улучшили, красный — ухудшили.',
-            style: TextStyle(fontSize: 11, color: AppColors.textDim),
+          Container(
+            height: 1,
+            width: double.infinity,
+            color: AppColors.textPrimary.withAlpha(60),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '▲ $buffCount   ▼ $nerfCount · зелёный — улучшили, красный — ухудшили.',
+            style: const TextStyle(fontSize: 12, color: AppColors.textDim),
           ),
           const SizedBox(height: 14),
           for (final entry in groups.entries) _group(entry.key, entry.value),
