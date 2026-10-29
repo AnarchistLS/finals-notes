@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:collection/collection.dart';
 import 'package:finals_notes/data/published.dart';
 import 'package:finals_notes/models/models.dart';
 import 'package:finals_notes/ui/patch_page.dart';
@@ -96,8 +97,42 @@ void main() {
     expect(find.text('Урон увеличен с 30 до 36'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  test('в готовом файле есть свежий патч 12.1.0', () async {
+    final file = File('web/data/patches_ru.json');
+    final raw = await file.readAsString();
+    final repository = PublishedRepository(
+      client: MockClient((request) async => http.Response.bytes(
+            utf8.encode(raw),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          )),
+    );
+    final snapshot = await repository.load();
+    expect(snapshot, isNotNull, reason: 'готовый файл не разбирается');
+    final item = snapshot!.patches
+        .where((p) => p.doc.version == '12.1.0')
+        .firstOrNull;
+    expect(item, isNotNull, reason: 'в файле нет патча 12.1.0');
+
+    // Страница патча строится из этих же данных: блок баланса и его
+    // готовый перевод должны быть в файле (Translocator, CB-01).
+    final texts = item!.doc.sections
+        .fold(<String>{}, (acc, s) => acc..addAll(s.blocks.map((b) => b.text)));
+    expect(
+      texts.contains('Decreased max range from 70m to 50m'),
+      isTrue,
+      reason: 'в 12.1.0 нет блока баланса транслокатора',
+    );
+    expect(
+      item.translations['Decreased max range from 70m to 50m'],
+      equals('Максимальная дальность действия уменьшена с 70 м до 50 м'),
+    );
+    expect(item.translations['Translocator'], isNotNull);
+    expect(item.doc.stats.length, equals(4));
+  });
 }
 
+// Вспомогательное: тестовые данные.
 PatchDoc _doc() => PatchDoc(
       id: 'test-1',
       slug: 'test-1',
