@@ -97,6 +97,10 @@ class SectionView extends StatelessWidget {
             ],
           ),
         );
+      case 'video':
+        // Видео-«гифки» с сайта рендерит только бот (в канал); в приложении
+        // пока показываем статичную обложку патча, без встроенного плеера.
+        return const SizedBox.shrink();
       case 'img':
         final url = block.url;
         if (url == null) return const SizedBox.shrink();

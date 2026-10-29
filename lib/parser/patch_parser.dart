@@ -149,8 +149,20 @@ PatchDoc parsePatchItem(Map<String, dynamic> item, {String apiBase = defaultApiB
     ));
   }
 
-  final nodes = fragment.querySelectorAll('h1, h2, h3, h4, p, li, img');
+  final nodes = fragment.querySelectorAll(
+    'h1, h2, h3, h4, p, li, img, .sqs-native-video',
+  );
   for (final element in nodes) {
+    // Блоки-«гифки» Squarespace: зацикленные видео без звука.
+    if ((element.localName ?? '') == 'div' &&
+        element.classes.contains('sqs-native-video')) {
+      final url = _videoPlaylistUrl(element);
+      if (url != null && sectionBlocks.isNotEmpty) {
+        sectionBlocks.add(DocBlock(kind: 'video', url: url));
+      }
+      continue;
+    }
+
     final tag = element.localName ?? '';
 
     if (tag == 'img') {
@@ -320,8 +332,31 @@ bool _isBoldOnly(Element element) {
   return boldText == allText;
 }
 
-String? _imageUrl(Element element) {
-  var src = element.attributes['src'] ??
+/// Из блока Squarespace native video достаёт базовый HLS-плейлист.
+///
+/// В `data-config-video` лежит JSON вида:
+/// `{"alexandriaUrl": "https://video.squarespace-cdn.com/content/v1/<lib>/<id>/{variant}", …}`.
+/// `{variant}` — это сигнал CDN'а о качестве; прямой файл по нему не открыть.
+/// Рабочая точка — `playlist.m3u8` рядом с базой: мастер-плейлист со списком
+/// вариантов (360p/1080p), из которого бот выбирает лёгкий.
+String? _videoPlaylistUrl(Element element) {
+  final raw = element.attributes['data-config-video'] ?? '';
+  if (raw.isEmpty) return null;
+  Map<String, dynamic> config;
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map<String, dynamic>) return null;
+    config = decoded;
+  } catch (_) {
+    return null;
+  }
+  final alexandria = (config['alexandriaUrl'] ?? '') as String;
+  final base = alexandria.split('{variant}').first;
+  if (!base.startsWith('https://')) return null;
+  return '${base}playlist.m3u8';
+}
+
+String? _imageUrl(Element element) {  var src = element.attributes['src'] ??
       element.attributes['data-src'] ??
       element.attributes['data-image'] ??
       '';

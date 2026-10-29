@@ -60,4 +60,56 @@ void main() {
       expect(stats, contains('minimum flash duration'));
     });
   });
+
+  group('Видео-«гифки» Squarespace', () {
+    // Упрощённый фрагмент реального блока Store Update 11.11.0.
+    const videoBlock = '''
+      <h2>STORE | FIELD CONTROL SET</h2>
+      <p>Check, one-two, one-two.. Are you receiving?</p>
+      <div class="sqs-block video-block">
+        <div class="sqs-native-video"
+             data-config-settings="{&quot;autoPlay&quot;:true,&quot;loop&quot;:true,&quot;muted&quot;:true}"
+             data-config-video="{&quot;systemDataSourceType&quot;:&quot;mp4&quot;,&quot;alexandriaUrl&quot;:&quot;https://video.squarespace-cdn.com/content/v1/62d66fa29e72c560f8efc020/780811c8-c6fd-449d-8eeb-eb202ac770e3/{variant}&quot;,&quot;durationSeconds&quot;:13.48,&quot;id&quot;:&quot;6ab267b806edba34cf21f724&quot;,&quot;systemDataVariants&quot;:&quot;2962:1080,988:360&quot;}">
+        </div>
+      </div>
+      <p>Grab the Retro A.C.E. Set for your Multi-Device.</p>
+    ''';
+
+    test('видео превращается в блок с HLS-плейлистом', () {
+      final patch = parsePatchItem(_item(videoBlock));
+      final videos = patch.sections
+          .expand((section) => section.blocks)
+          .where((block) => block.isVideo)
+          .toList();
+      expect(videos, hasLength(1));
+      expect(
+        videos.single.url,
+        'https://video.squarespace-cdn.com/content/v1/62d66fa29e72c560f8efc020/780811c8-c6fd-449d-8eeb-eb202ac770e3/playlist.m3u8',
+      );
+    });
+
+    test('видео стоит в потоке между текстами, а не в конце', () {
+      final patch = parsePatchItem(_item(videoBlock));
+      final kinds = patch.sections
+          .expand((section) => section.blocks)
+          .map((block) => block.kind)
+          .toList();
+      expect(kinds, ['p', 'video', 'p']);
+    });
+
+    test('блок без видео-конфигурации пропускается без падения', () {
+      final patch = parsePatchItem(_item('''
+        <h2>EVENT PASS</h2>
+        <div class="video-block"><div class="sqs-native-video"></div></div>
+        <p>Generously sponsored by IVADA!</p>
+      '''));
+      final videos = patch.sections
+          .expand((section) => section.blocks)
+          .where((block) => block.isVideo)
+          .toList();
+      expect(videos, isEmpty);
+      // Текст после «пустого» видео-блока не потерялся.
+      expect(patch.sections.first.blocks.any((b) => b.kind == 'p'), isTrue);
+    });
+  });
 }

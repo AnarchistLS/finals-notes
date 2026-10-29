@@ -95,9 +95,12 @@ class StatChange {
   String get groupKey => '$category\u0000$item';
 }
 
-/// Блок статьи: заголовок, абзац, пункт списка или картинка.
+/// Блок статьи: заголовок, абзац, пункт списка, картинка или видео.
 class DocBlock {
-  final String kind; // 'h2' | 'h3' | 'p' | 'li' | 'img'
+  final String kind; // 'h2' | 'h3' | 'p' | 'li' | 'img' | 'video'
+
+  /// Для `img` и `video` — ссылка на ресурс: картинка или HLS-плейлист
+  /// (`…/playlist.m3u8`), из которого бот собирает «гифку» для канала.
   final String text;
   final String? url;
 
@@ -108,6 +111,8 @@ class DocBlock {
   bool get isList => kind == 'li';
 
   bool get isImage => kind == 'img';
+
+  bool get isVideo => kind == 'video';
 
   Map<String, dynamic> toJson() => {'k': kind, 't': text, if (url != null) 'u': url};
 

@@ -16,13 +16,16 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:finals_notes/models/models.dart';
 import 'package:finals_notes/parser/patch_parser.dart';
 import 'package:finals_notes/services/bundled_key.dart';
 import 'package:finals_notes/services/deepl.dart';
 import 'package:finals_notes/services/doc_translator.dart';
 import 'package:finals_notes/services/translator.dart';
+import 'package:finals_notes/telegram/clip.dart';
 import 'package:finals_notes/telegram/render.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import 'env.dart';
 import 'file_cache.dart';
@@ -175,7 +178,7 @@ Future<void> _runOnce({
   };
   _log('движок: $engine');
 
-  final messages = config.full
+  var messages = config.full
       ? renderFull(patch, translations: translations)
       : config.digest
           ? renderDigest(patch, translations: translations)
@@ -187,14 +190,86 @@ Future<void> _runOnce({
 
   _log('сообщений: ${messages.length}');
 
+  // «Гифка»: зацикленный mp4 из видео-блока патча. Ошибка сборки не
+  // отменяет публикацию — пост всё равно уходит, просто без ролика.
+  File? clip;
+  final playlistUrl = _firstPlaylistUrl(patch);
+  if (playlistUrl != null) {
+    if (config.videoEnabled) {
+      _log('ищу гифку: $playlistUrl');
+      try {
+        final temp = await Directory.systemTemp.createTemp('finals_clip_');
+        clip = await buildClip(
+          client: client,
+          playlistUrl: playlistUrl,
+          outputDir: temp,
+        );
+        final sizeMb = (clip.lengthSync() / (1024 * 1024)).toStringAsFixed(1);
+        _log('гифка готова: ${clip.path} ($sizeMb МБ)');
+      } catch (error) {
+        _log('гифка не собралась, публикую без неё: $error');
+        clip = null;
+      }
+    } else {
+      _log('гифка отключена (BOT_VIDEO=0), публикую без неё');
+    }
+  } else if (config.videoEnabled) {
+    _log('видео-блоков в патче нет — пост без гифки');
+  }
+
   if (config.dryRun) {
+    if (clip != null) {
+      stdout.writeln(
+        '\n===== гифка =====\n${clip.path} '
+        '(${(clip.lengthSync() / (1024 * 1024)).toStringAsFixed(1)} МБ)\n'
+        'в dry-run не отправляется — удалить вручную при необходимости',
+      );
+    }
     for (var i = 0; i < messages.length; i++) {
       stdout.writeln(
         '\n===== сообщение ${i + 1}/${messages.length} · '
         '${messages[i].length} симв. =====\n${messages[i]}',
       );
     }
+    if (clip != null) {
+      try {
+        clip.deleteSync();
+      } catch (_) {}
+    }
     return;
+  }
+
+  // Анимация уходит ТРЕТЬИМ «сообщением» до текста: она первее привлекает
+  // внимание; подпись не ставим почти никогда — текст давно уложен в пост.
+  if (clip != null) {
+    final renderableMessages = [...messages];
+    String? caption = renderableMessages.firstOrNull;
+    // Подпись к анимации ограничена 1024 символами; HTML-разметку
+    // считать нельзя, поэтому сверяемся по «сырому» тексту (без тегов).
+    final plain = _stripTags(caption ?? '');
+    if (plain.length > 1024) caption = null;
+    try {
+      await _sendAnimation(
+        client: client,
+        token: config.token,
+        channel: config.channel,
+        file: clip,
+        caption: caption,
+        replyMarkup: renderableMessages.length <= 1
+            ? miniAppKeyboard(config.miniAppUrl)
+            : null,
+      );
+      _log('гифка отправлена');
+      renderableMessages.removeAt(0);
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      messages = renderableMessages;
+    } catch (error) {
+      _log('гифка не ушла в Telegram, публикую текст как обычно: $error');
+    } finally {
+      try {
+        clip.deleteSync();
+      } catch (_) {}
+    }
   }
 
   for (var i = 0; i < messages.length; i++) {
@@ -220,8 +295,88 @@ Future<void> _runOnce({
   _log('готово: ${patch.title}');
 }
 
-Future<void> _sendMessage({
+/// Первый видео-блок патча: HLS-плейлист для сборки «гифки».
+String? _firstPlaylistUrl(PatchDoc patch) {
+  for (final section in patch.sections) {
+    for (final block in section.blocks) {
+      if (block.isVideo) return block.url;
+    }
+  }
+  return null;
+}
+
+/// Без тегов Telegram-разметки: для проверки лимита подписи (1024 символа)
+/// Telegram считает «голый» текст, а не исходный HTML.
+String _stripTags(String html) =>
+    html.replaceAll(RegExp(r'<[^>]+>'), '');
+
+/// Отправляет зацикленную «гифку» (mp4 без звука) в канал.
+///
+/// `animation` в Telegram — это mp4 без звука: клиенты гоняют его по кругу
+/// без кнопки громкости и не показывают как видео. Наш патч-ролик — ровно
+/// такой формат: CDN-видео сайта делается `loop+muted` сам по себе.
+Future<void> _sendAnimation({
   required http.Client client,
+  required String token,
+  required String channel,
+  required File file,
+  String? caption,
+  Map<String, dynamic>? replyMarkup,
+  Map<String, dynamic>? replyParameters,
+}) async {
+  final uri = Uri.parse('https://api.telegram.org/bot$token/sendAnimation');
+
+  for (var attempt = 0; attempt < 3; attempt++) {
+    final request = http.MultipartRequest('POST', uri)
+      ..fields.addAll({
+        'chat_id': channel,
+        if (caption != null && caption.isNotEmpty) 'caption': caption,
+        if (caption != null && caption.isNotEmpty) 'parse_mode': 'HTML',
+        if (replyMarkup != null) 'reply_markup': jsonEncode(replyMarkup),
+      })
+      ..files.add(await http.MultipartFile.fromPath(
+        'animation',
+        file.path,
+        contentType: MediaType('video', 'mp4'),
+      ));
+
+    final response = await http.Response.fromStream(
+      await client
+          .send(request)
+          .timeout(const Duration(seconds: 120)),
+    );
+
+    Map<String, dynamic>? data;
+    try {
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      if (decoded is Map<String, dynamic>) data = decoded;
+    } catch (_) {
+      // Telegram может вернуть HTML-страницу прокси при сбое.
+    }
+
+    if (data?['ok'] == true) return;
+
+    final code = data?['error_code'];
+    if (code == 429) {
+      final parameters = data?['parameters'];
+      final retry = parameters is Map && parameters['retry_after'] is num
+          ? (parameters['retry_after'] as num?)?.toInt()
+          : null;
+      final seconds = retry ?? 5;
+      _log('Telegram просит подождать $seconds с');
+      await Future<void>.delayed(Duration(seconds: seconds));
+      continue;
+    }
+
+    final description = data?['description'] ?? 'HTTP ${response.statusCode}';
+    throw StateError('Telegram sendAnimation: $description');
+  }
+
+  throw StateError(
+      'Telegram: не удалось отправить гифку после 3 попыток');
+}
+
+Future<void> _sendMessage({  required http.Client client,
   required String token,
   required String channel,
   required String text,
@@ -398,6 +553,7 @@ class _Config {
     required this.deeplKey,
     required this.deeplEndpoint,
     required this.miniAppUrl,
+    required this.videoEnabled,
     required this.dryRun,
     required this.full,
     required this.digest,
@@ -416,6 +572,10 @@ class _Config {
   final String deeplKey;
   final String deeplEndpoint;
   final String miniAppUrl;
+
+  /// Публиковать зацикленные видео-«гифки» из патча (BOT_VIDEO).
+  final bool videoEnabled;
+
   final bool dryRun;
   final bool full;
   final bool digest;
@@ -437,6 +597,7 @@ class _Config {
       'MINIAPP_URL',
       'BOT_INTERVAL',
       'BOT_PAGES',
+      'BOT_VIDEO',
     ]);
 
     final backendName = values['TRANSLATE_BACKEND']?.toLowerCase();
@@ -451,6 +612,8 @@ class _Config {
     final pages = options.pages > 1
         ? options.pages
         : (int.tryParse(values['BOT_PAGES'] ?? '') ?? options.pages);
+    final videoRaw = (values['BOT_VIDEO'] ?? '').toLowerCase();
+    final videoEnabled = videoRaw != '0' && videoRaw != 'false' && videoRaw != 'off';
 
     return _Config(
       token: values['TELEGRAM_BOT_TOKEN'] ?? '',
@@ -459,6 +622,7 @@ class _Config {
       deeplKey: key,
       deeplEndpoint: values['DEEPL_ENDPOINT'] ?? '',
       miniAppUrl: values['MINIAPP_URL'] ?? '',
+      videoEnabled: videoEnabled,
       dryRun: options.dryRun,
       full: options.full,
       digest: options.digest,
