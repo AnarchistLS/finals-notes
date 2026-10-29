@@ -28,16 +28,32 @@ class SectionView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (section.title.isNotEmpty) ...[
-            Text(
-              translateHeading(section.title).toUpperCase(),
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
-                color: AppColors.accent,
+            // «Лента» как у Darkside: чёрный жирный курсив на янтарной плашке,
+            // под ней тонкая кремовая линия.
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    color: AppColors.tape,
+                    child: Text(
+                      translateHeading(section.title).toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        fontStyle: FontStyle.italic,
+                        letterSpacing: 0.8,
+                        color: Colors.black,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(height: 1, width: double.infinity, color: AppColors.textPrimary.withAlpha(60)),
+                ],
               ),
             ),
-            const SizedBox(height: 10),
           ],
           for (final block in section.blocks) _block(context, block),
         ],
@@ -52,7 +68,8 @@ class SectionView extends StatelessWidget {
           padding: const EdgeInsets.only(top: 18, bottom: 6),
           child: Row(
             children: [
-              Container(width: 3, height: 15, color: AppColors.accent),
+              // Белая плашка «❙» как маркер пунктов у Darkside.
+              Container(width: 3, height: 15, color: AppColors.textPrimary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(

@@ -5,7 +5,8 @@ import '../../models/models.dart';
 import '../theme.dart';
 
 class StatTile extends StatelessWidget {
-  const StatTile({super.key, required this.change, this.translations = const {}});
+  const StatTile(
+      {super.key, required this.change, this.translations = const {}});
 
   final StatChange change;
 
@@ -19,8 +20,8 @@ class StatTile extends StatelessWidget {
       };
 
   IconData get _icon => switch (change.impact) {
-        Impact.buff => Icons.trending_up_rounded,
-        Impact.nerf => Icons.trending_down_rounded,
+        Impact.buff => Icons.arrow_upward_rounded,
+        Impact.nerf => Icons.arrow_downward_rounded,
         Impact.neutral => Icons.remove_rounded,
       };
 
@@ -30,31 +31,53 @@ class StatTile extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: const EdgeInsets.fromLTRB(10, 9, 12, 9),
       decoration: BoxDecoration(
         color: AppColors.surfaceAlt,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withAlpha(70)),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.stroke.withAlpha(120)),
       ),
       child: Row(
         children: [
-          Icon(_icon, size: 18, color: color),
+          // Цветной скруглённый квадрат со стрелкой — фирменный маркер
+          // изменения у Darkside.
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Icon(
+              _icon,
+              size: 18,
+              color: Colors.black,
+            ),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  displayStatName(change.stat, translations),
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, height: 1.25),
-                ),
-                if (change.item.isNotEmpty) ...[
-                  const SizedBox(height: 2),
+                if (change.item.isNotEmpty)
                   Text(
                     change.item,
-                    style: const TextStyle(fontSize: 11, color: AppColors.textDim),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.accent,
+                      height: 1.2,
+                    ),
                   ),
-                ],
+                Text(
+                  displayStatName(change.stat, translations),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    height: 1.25,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -67,32 +90,32 @@ class StatTile extends StatelessWidget {
                   Text(
                     change.beforeText,
                     style: const TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textDim,
-                      decoration: TextDecoration.lineThrough,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.accent,
                     ),
                   ),
                   const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 6),
-                    child: Icon(Icons.arrow_forward_rounded, size: 13, color: AppColors.textDim),
+                    padding: EdgeInsets.symmetric(horizontal: 5),
+                    child: Icon(Icons.arrow_forward_rounded,
+                        size: 12, color: AppColors.textDim),
                   ),
                   Text(
                     change.afterText,
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: color),
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: color),
                   ),
                 ],
               ),
               const SizedBox(height: 2),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: color.withAlpha(28),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  change.deltaText,
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
-                ),
+              Text(
+                change.deltaText,
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: color.withAlpha(200)),
               ),
             ],
           ),

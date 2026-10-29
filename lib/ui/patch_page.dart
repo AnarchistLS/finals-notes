@@ -164,7 +164,8 @@ class _PatchPageState extends State<PatchPage> {
             flexibleSpace: FlexibleSpaceBar(background: _hero(context)),
           ),
           SliverToBoxAdapter(child: _meta(context)),
-          if (patch.stats.isNotEmpty) SliverToBoxAdapter(child: _statsBlock(context)),
+          if (patch.stats.isNotEmpty)
+            SliverToBoxAdapter(child: _statsBlock(context)),
           for (final section in patch.sections)
             SliverToBoxAdapter(
               // Раздел — это готовая колонка текста. Без границы отрисовки при
@@ -198,7 +199,8 @@ class _PatchPageState extends State<PatchPage> {
             fit: BoxFit.cover,
             cacheWidth: decodeWidth,
             filterQuality: FilterQuality.low,
-            errorBuilder: (_, __, ___) => Container(color: AppColors.surfaceAlt),
+            errorBuilder: (_, __, ___) =>
+                Container(color: AppColors.surfaceAlt),
           )
         else
           Container(
@@ -215,7 +217,7 @@ class _PatchPageState extends State<PatchPage> {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0x66000000), Color(0xEE08080C)],
+              colors: [Color(0x66000000), Color(0xEE131313)],
               stops: [0.2, 1],
             ),
           ),
@@ -247,7 +249,8 @@ class _PatchPageState extends State<PatchPage> {
           const SizedBox(height: 10),
           Text(
             translateTitle(patch.title),
-            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, height: 1.12),
+            style: const TextStyle(
+                fontSize: 26, fontWeight: FontWeight.w800, height: 1.12),
           ),
           if (patch.excerpt.isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -255,7 +258,8 @@ class _PatchPageState extends State<PatchPage> {
               _translations[patch.excerpt] ?? patch.excerpt,
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.textDim, fontSize: 13, height: 1.5),
+              style: const TextStyle(
+                  color: AppColors.textDim, fontSize: 13, height: 1.5),
             ),
           ],
           if (_translating) ...[
@@ -265,12 +269,14 @@ class _PatchPageState extends State<PatchPage> {
                 const SizedBox(
                   width: 12,
                   height: 12,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.accent),
                 ),
                 const SizedBox(width: 10),
                 Text(
                   'Переводим текст… ${_total == 0 ? '' : '$_done из $_total'}',
-                  style: const TextStyle(fontSize: 11, color: AppColors.textDim),
+                  style:
+                      const TextStyle(fontSize: 11, color: AppColors.textDim),
                 ),
               ],
             ),
@@ -292,9 +298,11 @@ class _PatchPageState extends State<PatchPage> {
                       width: 150,
                       height: 92,
                       fit: BoxFit.cover,
-                      cacheWidth: (150 * MediaQuery.devicePixelRatioOf(context)).round(),
-                      errorBuilder: (_, __, ___) =>
-                          const SizedBox(width: 150, child: ColoredBox(color: AppColors.surfaceAlt)),
+                      cacheWidth: (150 * MediaQuery.devicePixelRatioOf(context))
+                          .round(),
+                      errorBuilder: (_, __, ___) => const SizedBox(
+                          width: 150,
+                          child: ColoredBox(color: AppColors.surfaceAlt)),
                     ),
                   );
                 },
@@ -334,7 +342,11 @@ class _PatchPageState extends State<PatchPage> {
       ),
       child: Text(
         text,
-        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.8),
+        style: TextStyle(
+            color: color,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8),
       ),
     );
   }
@@ -352,12 +364,16 @@ class _PatchPageState extends State<PatchPage> {
         children: [
           Row(
             children: [
-              Container(width: 4, height: 18, color: AppColors.accent),
+              // Белая плашка-маркер «❙» как у Darkside.
+              Container(width: 4, height: 18, color: AppColors.textPrimary),
               const SizedBox(width: 10),
               const Expanded(
                 child: Text(
                   'ИЗМЕНЕНИЯ ХАРАКТЕРИСТИК',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.4),
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.4),
                 ),
               ),
               Text(
@@ -383,7 +399,8 @@ class _PatchPageState extends State<PatchPage> {
     final category = parts.isNotEmpty ? parts[0] : '';
     final item = parts.length > 1 ? parts[1] : '';
 
-    final header = item.isNotEmpty ? item : (category.isNotEmpty ? category : 'Общее');
+    final header =
+        item.isNotEmpty ? item : (category.isNotEmpty ? category : 'Общее');
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 18),
@@ -394,12 +411,30 @@ class _PatchPageState extends State<PatchPage> {
             padding: const EdgeInsets.only(bottom: 8, left: 2),
             child: Row(
               children: [
-                Text(header, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                if (item.isNotEmpty && category.isNotEmpty) ...[
+                if (item.isEmpty)
+                  Container(width: 3, height: 16, color: AppColors.textPrimary)
+                else ...[
+                  Text(
+                    header,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.accent,
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     translateHeading(category),
-                    style: const TextStyle(fontSize: 11, color: AppColors.textDim),
+                    style:
+                        const TextStyle(fontSize: 11, color: AppColors.textDim),
+                  ),
+                ],
+                if (item.isEmpty) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    header,
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                 ],
               ],
@@ -425,7 +460,8 @@ class _PatchPageState extends State<PatchPage> {
             foregroundColor: AppColors.textPrimary,
             side: const BorderSide(color: AppColors.stroke),
             padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
       ),

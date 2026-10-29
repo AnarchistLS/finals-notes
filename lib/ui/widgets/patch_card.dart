@@ -26,49 +26,58 @@ class PatchCard extends StatelessWidget {
               children: [
                 AspectRatio(
                   aspectRatio: 16 / 9,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      _cover(context),
-                      const DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [Colors.transparent, Color(0xD914141C)],
-                            stops: [0.35, 1],
+                  child: Container(
+                    // Тонкая кремовая рамка вокруг обложки — как у картинок
+                    // в постах Darkside.
+                    foregroundDecoration: BoxDecoration(
+                      border:
+                          Border.all(color: AppColors.textPrimary, width: 2),
+                    ),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        _cover(context),
+                        const DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Colors.transparent, Color(0xDE131313)],
+                              stops: [0.35, 1],
+                            ),
                           ),
                         ),
-                      ),
-                      Positioned(
-                        left: 12,
-                        top: 12,
-                        child: Row(
-                          children: [
-                            if (patch.version.isNotEmpty) _badge(patch.version, filled: true),
-                            if (patch.isStore) ...[
-                              const SizedBox(width: 6),
-                              _badge('МАГАЗИН'),
+                        Positioned(
+                          left: 12,
+                          top: 12,
+                          child: Row(
+                            children: [
+                              if (patch.version.isNotEmpty)
+                                _badge(patch.version, filled: true),
+                              if (patch.isStore) ...[
+                                const SizedBox(width: 6),
+                                _badge('МАГАЗИН'),
+                              ],
                             ],
-                          ],
-                        ),
-                      ),
-                      Positioned(
-                        left: 14,
-                        right: 14,
-                        bottom: 12,
-                        child: Text(
-                          translateTitle(patch.title),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            height: 1.15,
                           ),
                         ),
-                      ),
-                    ],
+                        Positioned(
+                          left: 14,
+                          right: 14,
+                          bottom: 12,
+                          child: Text(
+                            translateTitle(patch.title),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              height: 1.15,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 Padding(
@@ -77,25 +86,32 @@ class PatchCard extends StatelessWidget {
                     children: [
                       Text(
                         patch.dateText,
-                        style: const TextStyle(color: AppColors.textDim, fontSize: 12),
+                        style: const TextStyle(
+                            color: AppColors.textDim, fontSize: 12),
                       ),
                       const SizedBox(width: 12),
-                      if (patch.buffCount > 0) _counter('▲ ${patch.buffCount}', AppColors.buff),
-                      if (patch.buffCount > 0 && patch.nerfCount > 0) const SizedBox(width: 6),
-                      if (patch.nerfCount > 0) _counter('▼ ${patch.nerfCount}', AppColors.nerf),
+                      if (patch.buffCount > 0)
+                        _counter('▲ ${patch.buffCount}', AppColors.buff),
+                      if (patch.buffCount > 0 && patch.nerfCount > 0)
+                        const SizedBox(width: 6),
+                      if (patch.nerfCount > 0)
+                        _counter('▼ ${patch.nerfCount}', AppColors.nerf),
                       const Spacer(),
                       if (patch.stats.isEmpty)
                         const Text(
                           'без изменения статов',
-                          style: TextStyle(color: AppColors.textDim, fontSize: 11),
+                          style:
+                              TextStyle(color: AppColors.textDim, fontSize: 11),
                         )
                       else
                         Text(
                           '${patch.stats.length} изм.',
-                          style: const TextStyle(color: AppColors.textDim, fontSize: 11),
+                          style: const TextStyle(
+                              color: AppColors.textDim, fontSize: 11),
                         ),
                       const SizedBox(width: 4),
-                      const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textDim),
+                      const Icon(Icons.chevron_right_rounded,
+                          size: 18, color: AppColors.textDim),
                     ],
                   ),
                 ),

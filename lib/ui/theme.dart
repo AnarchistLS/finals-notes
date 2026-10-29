@@ -4,16 +4,24 @@ import '../models/models.dart';
 
 /// Палитра в духе THE FINALS: почти чёрный фон, кислотный акцент,
 /// зелёный/красный для усилений и ослаблений.
+///
+/// Перекрашена по оформлению Telegram-канала @tf_darkside (Darkside):
+/// тёплый почти-чёрный фон, кремовый текст, янтарный акцент, «лента»
+/// для заголовков разделов и зелёные/красные чипы у цифр.
 class AppColors {
-  static const Color bg = Color(0xFF08080C);
-  static const Color surface = Color(0xFF14141C);
-  static const Color surfaceAlt = Color(0xFF1C1C26);
-  static const Color stroke = Color(0xFF2A2A38);
-  static const Color accent = Color(0xFFE4FF3F);
-  static const Color buff = Color(0xFF3DDC84);
+  static const Color bg = Color(0xFF131313);
+  static const Color surface = Color(0xFF1A1A1A);
+  static const Color surfaceAlt = Color(0xFF232322);
+  static const Color stroke = Color(0xFF35342F);
+  static const Color accent = Color(0xFFF2A33C);
+
+  /// Жёлтая плашка-«лента» под заголовки разделов: у Darkside на ней
+  /// чёрный жирный курсив общий на весь канал.
+  static const Color tape = Color(0xFFF5B12E);
+  static const Color buff = Color(0xFF3EC95B);
   static const Color nerf = Color(0xFFFF4D5E);
-  static const Color textPrimary = Color(0xFFF5F6FA);
-  static const Color textDim = Color(0xFF9AA0B4);
+  static const Color textPrimary = Color(0xFFEDE9DC);
+  static const Color textDim = Color(0xFFA5A296);
 }
 
 ThemeData buildAppTheme() {
