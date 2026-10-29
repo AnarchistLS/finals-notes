@@ -52,8 +52,18 @@ void main() {
     final patch = _patch(
       excerpt: 'Big changes are coming.',
       stats: [
-        _stat(stat: 'Damage', before: 24, after: 26, impact: Impact.buff, item: 'ARN-220'),
-        _stat(stat: 'Spread', before: 12, after: 14, impact: Impact.nerf, item: 'Model 1887'),
+        _stat(
+            stat: 'Damage',
+            before: 24,
+            after: 26,
+            impact: Impact.buff,
+            item: 'ARN-220'),
+        _stat(
+            stat: 'Spread',
+            before: 12,
+            after: 14,
+            impact: Impact.nerf,
+            item: 'Model 1887'),
       ],
     );
 
@@ -68,16 +78,18 @@ void main() {
 
     expect(messages, hasLength(1));
     final text = messages.single;
-    expect(text, contains('🔥 <b>Обновление 12.0.0</b>'));
+    expect(text, contains('🟨 <b>Обновление 12.0.0</b>'));
     expect(text, contains('24.10.2026'));
     expect(text, contains('▲ 1 улучшение · ▼ 1 ослабление'));
-    expect(text, contains('<b>ОРУЖИЕ</b>'));
-    expect(text, contains('<b>ARN-220</b>'));
+    expect(text, contains('🟨 <b>ОРУЖИЕ</b>'));
+    expect(text, contains('▍ <b>ARN-220</b>'));
     // Словарь важнее машинного перевода: «damage» — это «урон».
-    expect(text, contains('▲ урон: 24 → 26'));
-    expect(text, contains('▼ разброс: 12 → 14'));
+    expect(text, contains('▲ урон: 24 → <b>26</b>'));
+    expect(text, contains('▼ разброс: 12 → <b>14</b>'));
     expect(text, contains('Грядут большие изменения.'));
     expect(text, contains('https://www.reachthefinals.com/patchnotes/12-0-0'));
+    // Подвал в стиле канала: версия на «нижней плашке» поста.
+    expect(text, contains('<b>12.0.0</b>'));
     expect(text.length, lessThanOrEqualTo(telegramMessageLimit));
   });
 
@@ -127,14 +139,15 @@ void main() {
       patch,
       translations: {
         'Damage increased from 24 to 26.': 'Урон увеличен с 24 до 26.',
-        'Fixed <script> tags in the UI.': 'Починили теги <script> в интерфейсе.',
+        'Fixed <script> tags in the UI.':
+            'Починили теги <script> в интерфейсе.',
       },
     );
 
     final text = messages.single;
-    expect(text, contains('<b>ИЗМЕНЕНИЯ БАЛАНСА</b>'));
-    expect(text, contains('<b>ОРУЖИЕ</b>'));
-    expect(text, contains('<b>ARN-220</b>'));
+    expect(text, contains('🟨 <b>ИЗМЕНЕНИЯ БАЛАНСА</b>'));
+    expect(text, contains('▍ <b>ОРУЖИЕ</b>'));
+    expect(text, contains('▍ <b>ARN-220</b>'));
     expect(text, contains('• Урон увеличен с 24 до 26.'));
     expect(text, contains('&lt;script&gt;'));
     expect(text, isNot(contains('<script>')));
@@ -157,15 +170,19 @@ void main() {
   test('без изменений дайджест показывает пункты разделов', () {
     final patch = _patch(
       sections: const [
-        PatchSection(title: 'BUG FIXES', blocks: [DocBlock(kind: 'li', text: 'Fixed a crash.')]),
-        PatchSection(title: 'KNOWN ISSUES', blocks: [DocBlock(kind: 'li', text: 'Sound bug.')]),
+        PatchSection(
+            title: 'BUG FIXES',
+            blocks: [DocBlock(kind: 'li', text: 'Fixed a crash.')]),
+        PatchSection(
+            title: 'KNOWN ISSUES',
+            blocks: [DocBlock(kind: 'li', text: 'Sound bug.')]),
       ],
     );
 
     final text = renderDigest(patch).single;
-    expect(text, contains('<b>ИСПРАВЛЕНИЯ</b>'));
+    expect(text, contains('🟨 <b>ИСПРАВЛЕНИЯ</b>'));
     expect(text, contains('• Fixed a crash.'));
-    expect(text, contains('<b>ИЗВЕСТНЫЕ ПРОБЛЕМЫ</b>'));
+    expect(text, contains('🟨 <b>ИЗВЕСТНЫЕ ПРОБЛЕМЫ</b>'));
     expect(text, contains('• Sound bug.'));
   });
 
@@ -186,9 +203,24 @@ void main() {
     final patch = _patch(
       title: 'PRIME TIME',
       stats: [
-        _stat(stat: 'Damage', before: 24, after: 26, impact: Impact.buff, item: 'ARN-220'),
-        _stat(stat: 'Cooldown', before: 40, after: 20, impact: Impact.buff, item: 'Zipline'),
-        _stat(stat: 'Magazine size', before: 30, after: 29, impact: Impact.nerf, item: 'AKM'),
+        _stat(
+            stat: 'Damage',
+            before: 24,
+            after: 26,
+            impact: Impact.buff,
+            item: 'ARN-220'),
+        _stat(
+            stat: 'Cooldown',
+            before: 40,
+            after: 20,
+            impact: Impact.buff,
+            item: 'Zipline'),
+        _stat(
+            stat: 'Magazine size',
+            before: 30,
+            after: 29,
+            impact: Impact.nerf,
+            item: 'AKM'),
       ],
     );
 
@@ -199,11 +231,12 @@ void main() {
       maxHighlights: 2,
     ).single;
 
-    expect(text, contains('🔥 <b>Патч 12.0.0 — PRIME TIME</b>'));
+    expect(text, contains('🟨 <b>Патч 12.0.0 — PRIME TIME</b>'));
     expect(text, contains('▲ 2 улучшения · ▼ 1 ослабление'));
     expect(text, contains('<b>3 изменения</b> · 3 предмета'));
     // Самое крупное относительное изменение — первым.
-    expect(text, contains('▲ Кулдаун (Zipline): 40 → 20'));
+    expect(text, contains('▍ <b>Самое заметное</b>'));
+    expect(text, contains('▲ Кулдаун (Zipline): 40 → <b>20</b>'));
     expect(text.indexOf('Zipline'), lessThan(text.indexOf('ARN-220')));
     expect(text, contains('…и ещё 1 изменение.'));
     expect(text, contains('📱 <b>Все 3 изменения — в нашем приложении</b>'));
@@ -213,7 +246,14 @@ void main() {
 
   test('анонс без адреса приложения ведёт на сайт', () {
     final patch = _patch(
-      stats: [_stat(stat: 'Damage', before: 24, after: 26, impact: Impact.buff, item: 'ARN-220')],
+      stats: [
+        _stat(
+            stat: 'Damage',
+            before: 24,
+            after: 26,
+            impact: Impact.buff,
+            item: 'ARN-220')
+      ],
     );
 
     final text = renderTeaser(patch).single;
@@ -231,9 +271,9 @@ void main() {
       ],
     );
 
-    final text = renderTeaser(patch, appUrl: 'https://t.me/finals_notes_bot/app').single;
+    final text =
+        renderTeaser(patch, appUrl: 'https://t.me/finals_notes_bot/app').single;
     expect(text, contains('• Fixed a rare crash on load.'));
     expect(text, contains('📱 <b>Весь патч — в нашем приложении</b>'));
   });
 }
-

@@ -15,6 +15,10 @@ import '../models/models.dart';
 /// Лимит Telegram на текст одного сообщения.
 const int telegramMessageLimit = 4096;
 
+/// Резерв под строку-«подвал» (пейджер + версия): раскладка сообщений
+/// учитывает её заранее, чтобы после добавления подвала не вылезти за лимит.
+const int _footerReserve = 64;
+
 /// Экранирует текст под `parse_mode: HTML`.
 String escapeHtml(String input) => input
     .replaceAll('&', '&amp;')
@@ -36,6 +40,43 @@ Map<String, dynamic>? miniAppKeyboard(String url) {
       ],
     ],
   };
+}
+
+// --- Оформление в стиле канала @tf_darkside --------------------------------
+
+/// Заголовок-«лента»: в постах канала это чёрный капслок на жёлтой плашке.
+/// В Telegram цвета нет, поэтому лента обозначается жёлтым квадратом.
+String _tape(String text) => '🟨 <b>${escapeHtml(text.toUpperCase())}</b>';
+
+/// Белая плашка «❙» перед названием предмета/подраздела.
+String _barLine(String text) => '▍ <b>${escapeHtml(text)}</b>';
+
+/// Строка изменения: «▲ Урон: 45 → 47» — итог выделен, как зелёная цифра
+/// «стало» у Darkside.
+String _statLine(Impact impact, String label, String before, String after) =>
+    '${_arrow(impact)} ${escapeHtml(label)}: '
+    '${escapeHtml(before)} → <b>${escapeHtml(after)}</b>';
+
+/// Строка-«подвал» в каждом сообщении: пейджер «❮ 2 / 9 ❯» и версия —
+/// как нижняя плашка постов канала.
+List<String> _paged(List<String> messages, String version) {
+  final total = messages.length;
+  final ver = version.trim();
+  final hasPager = total > 1;
+  final hasVer = ver.isNotEmpty;
+  if (!hasPager && !hasVer) return List<String>.unmodifiable(messages);
+
+  // Формируем вручную: номер в пейджере зависит от индекса сообщения.
+  final result = <String>[];
+  for (var i = 0; i < total; i++) {
+    final pager = hasPager ? '❮ ${i + 1} / $total ❯' : '';
+    final footer = [
+      if (pager.isNotEmpty) pager,
+      if (hasVer) '<b>${escapeHtml(ver)}</b>',
+    ].join('  ·  ');
+    result.add('${messages[i]}\n$footer');
+  }
+  return List<String>.unmodifiable(result);
 }
 
 /// Делит готовый текст на сообщения не длиннее [limit].
@@ -147,10 +188,13 @@ List<String> renderDigest(
   Map<String, String> translations = const {},
   int maxStats = 80,
 }) {
-  final builder = MessageBuilder(continuation: '<i>…продолжение</i>');
+  final builder = MessageBuilder(
+    continuation: '<i>…продолжение</i>',
+    limit: telegramMessageLimit - _footerReserve,
+  );
   final title = translateTitle(patch.title);
 
-  builder.line('🔥 <b>${escapeHtml(title)}</b>');
+  builder.line('🟨 <b>${escapeHtml(title)}</b>');
   builder.line(
     '<i>${patch.dateText}</i> · '
     '<a href="${escapeHtml(patch.url)}">на сайте</a>',
@@ -159,7 +203,8 @@ List<String> renderDigest(
   final excerpt = _translated(translations, patch.excerpt);
   if (excerpt.isNotEmpty) {
     builder.line('');
-    builder.line('<blockquote>${escapeHtml(_shorten(excerpt, 400))}</blockquote>');
+    builder
+        .line('<blockquote>${escapeHtml(_shorten(excerpt, 400))}</blockquote>');
   }
 
   final buffs = patch.buffCount;
@@ -168,9 +213,12 @@ List<String> renderDigest(
   if (patch.stats.isNotEmpty) {
     builder.line('');
     final parts = <String>[
-      if (buffs > 0) '▲ $buffs ${_plural(buffs, 'улучшение', 'улучшения', 'улучшений')}',
-      if (nerfs > 0) '▼ $nerfs ${_plural(nerfs, 'ослабление', 'ослабления', 'ослаблений')}',
-      if (neutral > 0) '● $neutral ${_plural(neutral, 'изменение', 'изменения', 'изменений')}',
+      if (buffs > 0)
+        '▲ $buffs ${_plural(buffs, 'улучшение', 'улучшения', 'улучшений')}',
+      if (nerfs > 0)
+        '▼ $nerfs ${_plural(nerfs, 'ослабление', 'ослабления', 'ослаблений')}',
+      if (neutral > 0)
+        '● $neutral ${_plural(neutral, 'изменение', 'изменения', 'изменений')}',
     ];
     builder.line(parts.join(' · '));
   }
@@ -178,7 +226,8 @@ List<String> renderDigest(
   final shown = patch.stats.take(maxStats).toList();
   final grouped = <String, Map<String, List<StatChange>>>{};
   for (final change in shown) {
-    final category = change.category.trim().isEmpty ? 'БАЛАНС' : change.category.trim();
+    final category =
+        change.category.trim().isEmpty ? 'БАЛАНС' : change.category.trim();
     final item = change.item.trim();
     final byItem = grouped.putIfAbsent(category, () => {});
     byItem.putIfAbsent(item, () => []).add(change);
@@ -187,11 +236,11 @@ List<String> renderDigest(
   for (final category in grouped.keys) {
     builder.line('');
     final categoryText = translateHeading(_translated(translations, category));
-    builder.line('<b>${escapeHtml(categoryText.toUpperCase())}</b>');
+    builder.line(_tape(categoryText));
     for (final entry in grouped[category]!.entries) {
       if (entry.key.isNotEmpty) {
         builder.line('');
-        builder.line('<b>${escapeHtml(entry.key)}</b>');
+        builder.line(_barLine(entry.key));
       }
       for (final change in entry.value) {
         // Словарь точнее машинного перевода на коротких названиях
@@ -201,8 +250,8 @@ List<String> renderDigest(
             ? dictionary
             : _translated(translations, change.stat);
         builder.line(
-          '${_arrow(change.impact)} ${escapeHtml(display)}: '
-          '${escapeHtml(change.beforeText)} → ${escapeHtml(change.afterText)}',
+          _statLine(
+              change.impact, display, change.beforeText, change.afterText),
         );
       }
     }
@@ -222,9 +271,10 @@ List<String> renderDigest(
   }
 
   builder.line('');
-  builder.line('<a href="${escapeHtml(patch.url)}">Читать полностью на reachthefinals.com</a>');
+  builder.line(
+      '<a href="${escapeHtml(patch.url)}">Читать полностью на reachthefinals.com</a>');
 
-  return builder.build();
+  return _paged(builder.build(), patch.version);
 }
 
 /// Короткий анонс патча для канала.
@@ -238,7 +288,7 @@ List<String> renderTeaser(
   String appUrl = '',
   int maxHighlights = 4,
 }) {
-  final builder = MessageBuilder();
+  final builder = MessageBuilder(limit: telegramMessageLimit - _footerReserve);
   final title = translateTitle(patch.title).trim();
   final version = patch.version.trim();
 
@@ -246,7 +296,7 @@ List<String> renderTeaser(
     if (version.isNotEmpty) 'Патч $version',
     if (title.isNotEmpty) escapeHtml(title),
   ].join(' — ');
-  builder.line('🔥 <b>$heading</b>');
+  builder.line('🟨 <b>$heading</b>');
   builder.line('<i>${patch.dateText}</i>');
 
   final stats = patch.stats;
@@ -262,9 +312,12 @@ List<String> renderTeaser(
 
     builder.line('');
     final parts = <String>[
-      if (buffs > 0) '▲ $buffs ${_plural(buffs, 'улучшение', 'улучшения', 'улучшений')}',
-      if (nerfs > 0) '▼ $nerfs ${_plural(nerfs, 'ослабление', 'ослабления', 'ослаблений')}',
-      if (neutral > 0) '● $neutral ${_plural(neutral, 'изменение', 'изменения', 'изменений')}',
+      if (buffs > 0)
+        '▲ $buffs ${_plural(buffs, 'улучшение', 'улучшения', 'улучшений')}',
+      if (nerfs > 0)
+        '▼ $nerfs ${_plural(nerfs, 'ослабление', 'ослабления', 'ослаблений')}',
+      if (neutral > 0)
+        '● $neutral ${_plural(neutral, 'изменение', 'изменения', 'изменений')}',
     ];
     if (parts.isNotEmpty) builder.line(parts.join(' · '));
     builder.line(
@@ -275,13 +328,13 @@ List<String> renderTeaser(
     final highlights = _topChanges(stats, maxHighlights);
     if (highlights.isNotEmpty) {
       builder.line('');
-      builder.line('<b>Самое заметное</b>');
+      builder.line(_barLine('Самое заметное'));
       for (final change in highlights) {
         final item = change.item.trim();
         builder.line(
           '${_arrow(change.impact)} ${escapeHtml(_highlightLabel(change, translations))}'
           '${item.isEmpty ? '' : ' (${escapeHtml(item)})'}: '
-          '${escapeHtml(change.beforeText)} → ${escapeHtml(change.afterText)}',
+          '${escapeHtml(change.beforeText)} → <b>${escapeHtml(change.afterText)}</b>',
         );
       }
       final rest = stats.length - highlights.length;
@@ -317,14 +370,15 @@ List<String> renderTeaser(
           : 'Там полная информация: цифры «было → стало» с подсветкой, '
               'фильтры по оружию и специализациям, поиск по предмету.',
     );
-    builder.line('👉 <a href="${escapeHtml(app)}">Открыть патчноуты THE FINALS</a>');
+    builder.line(
+        '👉 <a href="${escapeHtml(app)}">Открыть патчноуты THE FINALS</a>');
   } else {
     builder.line(
       '<a href="${escapeHtml(patch.url)}">Читать полностью на reachthefinals.com</a>',
     );
   }
 
-  return builder.build();
+  return _paged(builder.build(), version);
 }
 
 /// Текстовая версия дайджеста для патчей без числовых изменений.
@@ -343,7 +397,7 @@ void _renderTextDigest(
     final heading = translateHeading(section.title);
     if (heading.trim().isNotEmpty && heading != 'Обновление') {
       builder.line('');
-      builder.line('<b>${escapeHtml(heading.toUpperCase())}</b>');
+      builder.line(_tape(heading));
     }
 
     for (final block in section.blocks) {
@@ -353,12 +407,12 @@ void _renderTextDigest(
       switch (block.kind) {
         case 'h3':
           builder.line('');
-          builder.line('<b>${escapeHtml(translateHeading(text))}</b>');
+          builder.line(_barLine(translateHeading(text)));
           blocks++;
           break;
         case 'b':
           builder.line('');
-          builder.line('<b>${escapeHtml(text)}</b>');
+          builder.line(_barLine(text));
           blocks++;
           break;
         case 'li':
@@ -370,7 +424,7 @@ void _renderTextDigest(
         default:
           if (_isHeadingLike(block.text)) {
             builder.line('');
-            builder.line('<b>${escapeHtml(translateHeading(text).toUpperCase())}</b>');
+            builder.line(_tape(translateHeading(text)));
             blocks++;
           } else if (block.text.length >= 30 &&
               block.text.length <= 260 &&
@@ -400,10 +454,13 @@ List<String> renderFull(
   PatchDoc patch, {
   Map<String, String> translations = const {},
 }) {
-  final builder = MessageBuilder(continuation: '<i>…продолжение</i>');
+  final builder = MessageBuilder(
+    continuation: '<i>…продолжение</i>',
+    limit: telegramMessageLimit - _footerReserve,
+  );
   final title = translateTitle(patch.title);
 
-  builder.line('🔥 <b>${escapeHtml(title)}</b>');
+  builder.line('🟨 <b>${escapeHtml(title)}</b>');
   builder.line(
     '<i>${patch.dateText}</i> · '
     '<a href="${escapeHtml(patch.url)}">на сайте</a>',
@@ -413,21 +470,22 @@ List<String> renderFull(
     final heading = translateHeading(section.title);
     if (heading.trim().isNotEmpty && heading != 'Обновление') {
       builder.line('');
-      builder.line('<b>${escapeHtml(heading.toUpperCase())}</b>');
+      builder.line(_tape(heading));
     }
 
     for (final block in section.blocks) {
       switch (block.kind) {
         case 'h3':
           builder.line('');
-          builder.line('<b>${escapeHtml(translateHeading(block.text))}</b>');
+          builder.line(_barLine(translateHeading(block.text)));
           break;
         case 'b':
           builder.line('');
-          builder.line('<b>${escapeHtml(_translated(translations, block.text))}</b>');
+          builder.line(_barLine(_translated(translations, block.text)));
           break;
         case 'li':
-          builder.line('• ${escapeHtml(_translated(translations, block.text))}');
+          builder
+              .line('• ${escapeHtml(_translated(translations, block.text))}');
           break;
         case 'img':
           break;
@@ -436,8 +494,7 @@ List<String> renderFull(
           if (_isHeadingLike(block.text)) {
             builder.line('');
             builder.line(
-              '<b>${escapeHtml(translateHeading(_translated(translations, block.text)).toUpperCase())}</b>',
-            );
+                _tape(translateHeading(_translated(translations, block.text))));
           } else {
             builder.line(escapeHtml(_translated(translations, block.text)));
           }
@@ -446,8 +503,9 @@ List<String> renderFull(
   }
 
   builder.line('');
-  builder.line('<a href="${escapeHtml(patch.url)}">Источник: reachthefinals.com</a>');
-  return builder.build();
+  builder.line(
+      '<a href="${escapeHtml(patch.url)}">Источник: reachthefinals.com</a>');
+  return _paged(builder.build(), patch.version);
 }
 
 /// Название характеристики: словарь точнее машинного перевода на коротких
@@ -466,7 +524,8 @@ String _statLabel(StatChange change, Map<String, String> translations) {
 /// встречаются правки вроде «здоровье лестниц», которые по процентам
 /// обгоняют всё остальное, но в анонсе выглядят странно.
 List<StatChange> _topChanges(List<StatChange> stats, int limit) {
-  final primary = _pick(stats.where((change) => _isKeyCategory(change.category)), limit);
+  final primary =
+      _pick(stats.where((change) => _isKeyCategory(change.category)), limit);
   if (primary.length >= limit) return primary;
 
   final picked = primary.map((change) => change.item).toSet();
@@ -542,7 +601,9 @@ List<String> _textBullets(
   for (final section in patch.sections) {
     for (final block in section.blocks) {
       if (result.length >= limit) return result;
-      if (block.kind != 'li' && block.kind != 'b' && block.kind != 'h3') continue;
+      if (block.kind != 'li' && block.kind != 'b' && block.kind != 'h3') {
+        continue;
+      }
       final text = _translated(translations, block.text).trim();
       if (text.length < 12 || text.length > 160 || _isDate(text)) continue;
       if (_isHeadingLike(block.text)) continue;
