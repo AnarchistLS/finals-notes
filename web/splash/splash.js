@@ -331,11 +331,16 @@ function step(dt) {
       const p2 = Math.min(1, Math.max(0, (tState - T.title * 0.3) / (T.title * 0.7)));
       subtitle.style.opacity = easeReveal(p2).toFixed(3);
       subtitle.style.transform = `translateY(${(10 * (1 - easeReveal(p2))).toFixed(2)}px)`;
-      if (tState >= T.title) { state = ST.END; tState = 0; }
+      if (tState >= T.title) {
+        state = ST.END; tState = 0;
+        // Анимация отыграла целиком: можно уходить, если приложение готово.
+        animationEnded = true;
+        tryClose();
+      }
       break;
     }
     case ST.END: {
-      /* Финальный кадр держим до первого кадра Flutter:
+      /* Финальный кадр держим, пока не придёт первый кадр Flutter:
          надпись уже проявилась, блик погас — заставка «стоит». */
       break;
     }
@@ -466,34 +471,36 @@ requestAnimationFrame(now => {
 
 /* =========================================================
    Жизненный цикл заставки.
-   Flutter сообщает о первом кадре через window.finalsSplash.finish().
-   Первый вход: даём логотипу проявиться полностью (~2.5 с от старта).
-   Повторный вход в той же сессии: убираем через 0.9 с — приложение
-   открывается часто, и долгая заставка каждый раз только мешает.
+   Анимация проигрывается ЦЕЛИКОМ: блик → проявление логотипа →
+   подъём → надпись DARKSIDE. Flutter сообщает о первом кадре через
+   window.finalsSplash.finish(), но уходим мы только когда отыграл
+   финал и приложение уже отрисовано: что наступит позже — того и ждём.
    ========================================================= */
 const splashEl = document.getElementById('splash');
-const startedAt = performance.now();
-const SHOW_AFTER_MS = 280;      // раньше не показываем: быстрый старт — без мигания
-const FIRST_LOAD_MS = 2200;     // первый вход: успевает проявиться логотип
-const REPEAT_MS = 900;          // повторный вход: не задерживаем
+const SHOW_AFTER_MS = 280;    // раньше не показываем: быстрый старт — без мигания
+const HOLD_FINAL_MS = 450;    // пауза на финальном кадре, чтобы надпись прочиталась
+const WATCHDOG_MS = 15000;    // страховка: картинка не пришла — не держим вечно
 let firstFrameAt = 0;
+let animationEnded = false;
 let closing = false;
-
-
-let seenBefore = false;
-try { seenBefore = sessionStorage.getItem('finalsSplashSeen') === '1'; } catch (e) {}
+let closeTimer = null;
 
 // Показываем заставку, только если приложение ещё не готово.
 setTimeout(function () {
   if (closing || firstFrameAt) return;
-
   splashEl.classList.add('splash-visible');
 }, SHOW_AFTER_MS);
+
+// Уходим, когда отыграл финал И приложение отрисовалось.
+function tryClose() {
+  if (closing || !animationEnded || !firstFrameAt || closeTimer) return;
+  closeTimer = setTimeout(closeSplash, HOLD_FINAL_MS);
+}
 
 function closeSplash() {
   if (closing || !splashEl) return;
   closing = true;
-  try { sessionStorage.setItem('finalsSplashSeen', '1'); } catch (e) {}
+  clearTimeout(closeTimer);
   splashEl.classList.add('splash-out');
   setTimeout(function () {
     if (splashEl.parentNode) splashEl.parentNode.removeChild(splashEl);
@@ -506,17 +513,14 @@ window.finalsSplash = {
     // ?splash=1 — режим отладки: держим заставку, чтобы рассмотреть кадры
     if (params.get('splash') === '1') return;
     firstFrameAt = performance.now();
-    const elapsed = performance.now() - startedAt;
-    let wait;
-    if (seenBefore) {
-      wait = Math.max(0, REPEAT_MS - elapsed);
-    } else {
-      // конец фазы REVEAL: логотип уже виден целиком
-      const revealedAt = (T.fadeIn + T.holdAfterArrival + T.reveal) * 1000;
-      wait = Math.max(0, Math.min(revealedAt - tAbs * 1000, FIRST_LOAD_MS - elapsed));
-    }
-    setTimeout(closeSplash, wait);
+    tryClose();
   },
   close: closeSplash,
   get done() { return closing; },
 };
+
+// Страховка: если анимация почему-то не доехала до финала (например,
+// не загрузилась картинка), приложение всё равно должно открыться.
+setTimeout(function () {
+  if (firstFrameAt) closeSplash();
+}, WATCHDOG_MS);
