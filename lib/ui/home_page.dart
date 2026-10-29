@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -51,15 +53,16 @@ class _HomePageState extends State<HomePage> {
   Future<void> _bootstrap() async {
     // В Mini App сначала пробуем готовый файл: он уже переведён и лежит на
     // том же домене, поэтому не упирается в CORS сайта и грузится мгновенно.
-    // Сначала - свежий вариант (?v=…): он обходит кеш service worker и
-    // кеш GitHub Pages, поэтому новый патч виден сразу после открытия,
-    // а не после свайпа вниз или следующего перезапуска.
     if (kIsWeb) {
-      var snapshot = await _published.load(fresh: true);
-      snapshot ??= await _published.load();
-      if (!mounted) return;
+      PublishedSnapshot? snapshot = await _published.load();
       if (snapshot != null) {
+        if (!mounted) return;
         _applyPublished(snapshot);
+        // Свежие данные тянем в фоне: ?v=… обходит кеш service worker и
+        // кеш GitHub Pages, поэтому новый патч появляется сразу после
+        // выхода поста в канале, без свайпа и перезапуска. Пока играет
+        // заставка (~7 с), обновление успевает доехать.
+        unawaited(_revalidatePublished(snapshot.generatedAt));
         return;
       }
     }
@@ -88,6 +91,19 @@ class _HomePageState extends State<HomePage> {
       _loading = false;
       _error = null;
     });
+  }
+
+  /// Фоновое перепроверка готового файла на предмет новых патчей.
+  /// Обновляем экран только если файл реально новее показанного.
+  Future<void> _revalidatePublished(DateTime knownGeneratedAt) async {
+    try {
+      final snapshot = await _published.load(fresh: true);
+      if (snapshot == null || !mounted) return;
+      if (!snapshot.generatedAt.isAfter(knownGeneratedAt)) return;
+      _applyPublished(snapshot);
+    } catch (_) {
+      // Оффлайн или сбой сети: продолжаем показывать уже загруженные данные.
+    }
   }
 
   Future<void> _refresh({bool silent = false}) async {
