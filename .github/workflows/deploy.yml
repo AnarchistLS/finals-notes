@@ -13,6 +13,12 @@ on:
   # Вызов из «Обновление патчей»: коммит, сделанный ботом через GITHUB_TOKEN,
   # не запускает другие workflow, поэтому деплой зовём напрямую.
   workflow_call:
+    inputs:
+      sha:
+        description: 'Коммит для сборки (обычно - свежий коммит с данными). Пусто - текущий.'
+        required: false
+        type: string
+        default: ''
 
 concurrency:
   group: deploy-miniapp
@@ -35,6 +41,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # По умолчанию (workflow_call) checkout берёт SHA задачи-родителя -
+          # то есть main ДО коммита с данными, и на Pages уезжает прошлая
+          # версия. Явно указываем коммит: либо переданный из «Обновления
+          # патчей», либо коммит пуша.
+          ref: ${{ github.event_name == 'workflow_call' && inputs.sha || github.sha }}
 
       - uses: subosito/flutter-action@v2
         with:

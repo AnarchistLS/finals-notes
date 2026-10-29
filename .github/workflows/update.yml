@@ -38,6 +38,10 @@ jobs:
     timeout-minutes: 30
     outputs:
       changed: ${{ steps.commit.outputs.changed }}
+      # SHA коммита с данными: деплой должен собирать именно его, а не
+      # состояние main на момент старта задачи (иначе на сайт уезжают
+      # данные прошлого запуска, и новый патч не появляется в приложении).
+      sha: ${{ steps.commit.outputs.sha }}
 
     steps:
       - uses: actions/checkout@v4
@@ -103,6 +107,7 @@ jobs:
           for attempt in 1 2 3; do
             if git push; then
               echo "changed=true" >> "$GITHUB_OUTPUT"
+              echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             echo "push не прошёл, подтягиваю изменения (попытка $attempt)"
@@ -141,3 +146,8 @@ jobs:
       pages: write
       id-token: write
     uses: ./.github/workflows/deploy.yml
+    # Передаём SHA коммита с данными: по умолчанию вызываемый workflow
+    # собирает состояние main на момент старта задачи, то есть БЕЗ свежих
+    # данных. Из-за этого Mini App показывал предыдущий патч.
+    with:
+      sha: ${{ needs.update.outputs.sha }}

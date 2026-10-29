@@ -51,8 +51,12 @@ class _HomePageState extends State<HomePage> {
   Future<void> _bootstrap() async {
     // В Mini App сначала пробуем готовый файл: он уже переведён и лежит на
     // том же домене, поэтому не упирается в CORS сайта и грузится мгновенно.
+    // Сначала - свежий вариант (?v=…): он обходит кеш service worker и
+    // кеш GitHub Pages, поэтому новый патч виден сразу после открытия,
+    // а не после свайпа вниз или следующего перезапуска.
     if (kIsWeb) {
-      final snapshot = await _published.load();
+      var snapshot = await _published.load(fresh: true);
+      snapshot ??= await _published.load();
       if (!mounted) return;
       if (snapshot != null) {
         _applyPublished(snapshot);
