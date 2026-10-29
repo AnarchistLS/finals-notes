@@ -7,12 +7,15 @@ import 'stat_tile.dart';
 
 /// Рендерит один раздел статьи: заголовки, пункты, абзацы и картинки.
 /// Числовые изменения внутри текста подсвечиваются зелёным/красным.
+/// Карточки характеристик, прикреплённые к предметам, приходят в
+/// [itemStats] — «индекс блока-предмета → карточки».
 class SectionView extends StatelessWidget {
   const SectionView({
     super.key,
     required this.section,
     required this.stats,
     this.translations = const {},
+    this.itemStats = const {},
   });
 
   final PatchSection section;
@@ -20,6 +23,8 @@ class SectionView extends StatelessWidget {
 
   /// Переводы блоков: оригинальный текст -> русский.
   final Map<String, String> translations;
+
+  final Map<int, List<StatChange>> itemStats;
 
   @override
   Widget build(BuildContext context) {
@@ -60,13 +65,18 @@ class SectionView extends StatelessWidget {
               ),
             ),
           ],
-          for (final block in section.blocks) _block(context, block),
+          for (var i = 0; i < section.blocks.length; i++)
+            _block(context, section.blocks[i], itemStats[i]),
         ],
       ),
     );
   }
 
-  Widget _block(BuildContext context, DocBlock block) {
+  Widget _block(
+    BuildContext context,
+    DocBlock block, [
+    List<StatChange>? attached,
+  ]) {
     switch (block.kind) {
       case 'h3':
         return Padding(
@@ -87,11 +97,9 @@ class SectionView extends StatelessWidget {
           ),
         );
       case 'b':
-        // Предмет из текста патча. Если по нему есть числовые изменения,
-        // показываем сразу его тайлы статов — «заголовок + карточки»,
-        // как на постах Darkside.
-        final itemStats =
-            stats.where((c) => c.item == block.text).toList(growable: false);
+        // Предмет из текста патча. Если к нему прикреплены числовые
+        // изменения (через itemStats раскладки), показываем сразу его
+        // карточки — «заголовок + карточки», как на постах Darkside.
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -103,8 +111,8 @@ class SectionView extends StatelessWidget {
                     const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
               ),
             ),
-            if (itemStats.isNotEmpty) ...[
-              for (final change in itemStats)
+            if (attached != null && attached.isNotEmpty) ...[
+              for (final change in attached)
                 StatTile(change: change, translations: translations),
             ],
           ],

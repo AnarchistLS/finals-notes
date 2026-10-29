@@ -9,6 +9,7 @@ import '../l10n/glossary.dart';
 import '../models/models.dart';
 import '../services/translator.dart';
 import 'theme.dart';
+import 'patch_layout.dart';
 import 'widgets/section_view.dart';
 import 'widgets/stat_tile.dart';
 
@@ -149,23 +150,12 @@ class _PatchPageState extends State<PatchPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Статы, привязавшиеся к блокам внутри разделов, рисует SectionView.
-    // В отдельном блоке наверху остаются только те, чей предмет и строка
-    // не найдены ни в одном разделе — иначе карточки дублируются.
-    final sectionItems = {
-      for (final section in patch.sections)
-        for (final block in section.blocks)
-          if (block.kind == 'b') block.text,
-    };
-    final sectionRaws = {
-      for (final section in patch.sections)
-        for (final block in section.blocks)
-          if (block.kind == 'li') block.text,
-    };
-    final loose = patch.stats
-        .where((s) =>
-            !sectionItems.contains(s.item) && !sectionRaws.contains(s.raw))
-        .toList();
+    // Компоновка «Об обнове → Гаджеты и геймплей → Исправления» (см.
+    // patch_layout.dart). Статы, привязавшиеся к предметам, рисует
+    // SectionView; в отдельном блоке остаются только неопознанные,
+    // чтобы карточки не дублировались.
+    final groups = layoutPatchDoc(patch);
+    final loose = looseStats(patch, groups);
 
     return Scaffold(
       body: CustomScrollView(
@@ -182,21 +172,25 @@ class _PatchPageState extends State<PatchPage> {
             flexibleSpace: FlexibleSpaceBar(background: _hero(context)),
           ),
           SliverToBoxAdapter(child: _meta(context)),
-          if (loose.isNotEmpty)
-            SliverToBoxAdapter(child: _statsBlock(context, loose)),
-          for (final section in patch.sections)
+          for (final group in groups)
             SliverToBoxAdapter(
               // Раздел — это готовая колонка текста. Без границы отрисовки при
               // скролле перерисовывается весь вьюпорт целиком (каждый глиф
               // заново), из-за чего на средних телефонах fps падает вдвое.
               child: RepaintBoundary(
                 child: SectionView(
-                  section: section,
-                  stats: patch.stats,
+                  section: PatchSection(
+                    title: group.title,
+                    blocks: group.blocks,
+                  ),
+                  stats: group.stats,
                   translations: _translations,
+                  itemStats: group.itemStats,
                 ),
               ),
             ),
+          if (loose.isNotEmpty)
+            SliverToBoxAdapter(child: _statsBlock(context, loose)),
           SliverToBoxAdapter(child: _footer(context)),
           const SliverToBoxAdapter(child: SizedBox(height: 36)),
         ],
