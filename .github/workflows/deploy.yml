@@ -9,6 +9,12 @@ name: Деплой Mini App
 on:
   push:
     branches: [main]
+    # Состояние бота и его кеш переводов не влияют на содержимое сайта:
+    # их пушит джоба announce после поста - не пересобирать Pages из-за них.
+    paths-ignore:
+      - 'tool/.bot-state.json'
+      - 'tool/.translation-cache.json'
+      - 'tool/.last-run'
   workflow_dispatch:
   # Вызов из «Обновление патчей»: коммит, сделанный ботом через GITHUB_TOKEN,
   # не запускает другие workflow, поэтому деплой зовём напрямую.

@@ -12,8 +12,10 @@
 | Mini App в Telegram | https://t.me/finals_notes_bot/app |
 | Репозиторий и запуски | https://github.com/AnarchistLS/finals-notes/actions |
 
-Бот проверяет сайт каждые 15 минут по расписанию GitHub Actions: новый патч
-переводится один раз, публикуется в канал и попадает в данные Mini App.
+Бот проверяет сайт каждые 5 минут по расписанию GitHub Actions (дёргает внешний
+cron-job.org). Новый патч сначала попадает в данные и на GitHub Pages, и только
+потом публикуется в канал: пост обещает «открой приложение» лишь после того,
+как приложение действительно обновлено.
 
 ## Что уже умеет
 - Тянет патчноуты с `reachthefinals.com` через машиночитаемый JSON
@@ -117,7 +119,8 @@ dart run tool/bot.dart --watch --interval=600
 
 Бот — обычный консольный Dart-процесс, но держать компьютер включённым не
 обязательно: есть готовый workflow `.github/workflows/update.yml`, который
-раз в 15 минут запускает `tool/bot.dart --once` на GitHub Actions. Если хостинг
+раз в 5 минут собирает данные, деплоит их и только затем запускает
+`tool/bot.dart --once` на GitHub Actions. Если хостинг
 в России, DeepL ответит `451 Unavailable in your region` — бот сам уйдёт на
 Google (в логе будет `движок: Google (DeepL недоступен)`), либо укажите
 `DEEPL_ENDPOINT` с прокси. На раннере GitHub блокировки нет, поэтому DeepL
@@ -136,12 +139,15 @@ Google (в логе будет `движок: Google (DeepL недоступен
 ### Как устроено
 
 ```
-GitHub Actions (раз в 15 минут, ~1–2 мин)
-  └─ tool/bot.dart --once      пост в канал + кнопка «Открыть приложение»
+GitHub Actions (раз в 5 минут, ~1–2 мин)
   └─ tool/publish.dart         web/data/patches_ru.json (текст + переводы)
   └─ коммит данных
+  └─ deploy.yml                Pages пересобирается, данные живут
 GitHub Pages
   └─ build/web + data/patches_ru.json  ← читает Mini App
+  └─ и только после этого:
+Бот-постер (джоба announce)
+  └─ tool/bot.dart --once      пост в канал + кнопка «Открыть приложение»
 ```
 
 Хостинг — GitHub Pages (`https://<логин>.github.io/finals-notes/`), а не
@@ -156,15 +162,18 @@ Cloudflare Pages: провайдеры в России блокируют `*.pag
 - Если файла нет (обычный `flutter run -d chrome`), приложение работает
   по-старому: тянет сайт и переводит на лету.
 - Кеш переводов общий с ботом, поэтому новый патч переводится один раз.
+- Пост уходит в канал только после успешного деплоя (джоба `announce` идёт
+  за `deploy`). Если Telegram недоступен и пост не ушла, состояние бота не
+  обновится, и следующий прогон повторит попытку без лишнего деплоя.
 - `patches_ru.json` перезаписывается только когда патчи или переводы реально
-  изменились: иначе файл менялся бы каждые 15 минут, а каждый коммит запускал
+  изменились: иначе файл менялся бы каждые 5 минут, а каждый коммит запускал
   бы сборку и деплой.
 - Расписание GitHub — раз в 3 часа, это страховка. Частые проверки — каждые
-  15 минут — делает внешний cron-job.org: он вызывает `workflow_dispatch`
+  5 минут — делает внешний cron-job.org: он вызывает `workflow_dispatch`
   через API. Сам GitHub выполняет `schedule` не чаще ~40 минут, поэтому
   полагаться только на него нельзя.
 - Деплой сайта запускается только когда данные реально изменились, иначе
-  каждые 15 минут впустую собиралась бы Flutter-сборка.
+  каждые 5 минут впустую собиралась бы Flutter-сборка.
 - GitHub отключает расписание в публичном репозитории после 60 дней без
   коммитов, поэтому раз в месяц workflow сам коммитит `tool/.last-run`.
 
@@ -207,10 +216,10 @@ Cloudflare Pages: провайдеры в России блокируют `*.pag
 Если `github.io` окажется медленным, привяжите свой домен (Settings → Pages →
 Custom domain): приложению всё равно, откуда читать `data/patches_ru.json`.
 
-### Внешний cron (каждые 15 минут)
+### Внешний cron (каждые 5 минут)
 
 GitHub выполняет `schedule` не чаще ~40 минут, поэтому частоту задаёт
-cron-job.org: он раз в 15 минут дёргает API GitHub и запускает
+cron-job.org: он раз в 5 минут дёргает API GitHub и запускает
 «Обновление патчей». Токен живёт только в cron-job.org, прав на код у него
 нет — только на запуск workflow.
 
@@ -225,7 +234,7 @@ cron-job.org: он раз в 15 минут дёргает API GitHub и запу
 3. Create cronjob:
    - Title: `finals-notes update`
    - URL: `https://api.github.com/repos/AnarchistLS/finals-notes/actions/workflows/update.yml/dispatches`
-   - Schedule: every 15 minutes (`*/15 * * * *`)
+   - Schedule: every 5 minutes (`*/5 * * * *`)
    - Advanced → Request method: `POST`
    - Headers:
      `Authorization: Bearer github_pat_…`,
@@ -281,7 +290,7 @@ tool/proxy.dart               локальный CORS-прокси для зап
 tool/serve.dart               раздача release-сборки web
 tool/build-apk.ps1            сборка APK (через ASCII-путь, см. ниже)
 tool/make-icon.ps1            генерация иконки приложения
-.github/workflows/update.yml  раз в 15 минут: пост в канал + данные для Mini App
+.github/workflows/update.yml  раз в 5 минут: данные + деплой Pages, пост в канал последним
 .github/workflows/deploy.yml  сборка web и деплой на GitHub Pages
 test/stat_parser_test.dart    тесты логики сравнения показателей
 test/translator_test.dart     тесты пакетного перевода и кеша

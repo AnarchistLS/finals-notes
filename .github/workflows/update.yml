@@ -1,58 +1,168 @@
 name: Обновление патчей
 
-# Частые проверки делает внешний cron (cron-job.org): он раз в 15 минут
-# вызывает этот workflow через API. Расписание ниже - страховка на случай,
-# если внешний cron отвалится: GitHub всё равно выполняет его не чаще
-# примерно раза в 40 минут.
-# Если репозиторий снова станет приватным - уберите schedule совсем или
-# оставьте раз в 6 часов: 2000 минут в месяц на частые запуски не хватит.
+# Частоту задаёт внешний cron (cron-job.org): сейчас раз в 5 минут.
+# Ручной запуск - через API. Страховочный schedule - раз в 3 часа: GitHub сам
+# выполняет расписание не чаще ~40 минут, поэтому полагаться на него нельзя,
+# зато он ловит смерть внешнего cron.
+# NB: если репозиторий снова станет приватным, уберите schedule совсем -
+# на частые запуски не хватит лимита Actions (2 000 минут в месяц).
+#
+# Порядок прогона: сначала данные и деплой сайта, пост в канал - последним.
+# Бот пишет «обновление уже в приложении» только тогда, когда patches_ru.json
+# собран и уже на GitHub Pages: обещать кнопку раньше - бессмысленно.
 on:
   schedule:
     - cron: '0 */3 * * *'
   workflow_dispatch:
     inputs:
       init:
-        description: 'Запомнить текущий патч и ничего не публиковать'
+        description: 'Запомнить текущий патч как опубликованный, ничего не отправляя'
         type: boolean
         default: false
       force:
-        description: 'Опубликовать патч заново, даже если он уже был'
+        description: 'Опубликовать патч повторно, даже если он уже был опубликован'
         type: boolean
         default: false
       patch:
-        description: 'Опубликовать конкретный патч (id из --list, напр. 11-110)'
+        description: 'Опубликовать конкретный патч (id из --list, например 11-110)'
         type: string
         default: ''
 
-# Один запуск за раз: два обновления одновременно писали бы в одни файлы.
+# Прогоны не отменяются, а ставятся в очередь: если предыдущий не успел
+# дожать пост, следующий подождёт - патч не потеряется.
 concurrency:
   group: update-patches
   cancel-in-progress: false
 
 permissions:
   contents: write
-  # Нужны задаче деплоя, которую этот workflow вызывает: без них
-  # deploy-pages не может запросить OIDC-токен и падает.
+  # Права нужны деплою Pages: он выполняется в рамках этого прогона через
+  # workflow_call, и его OIDC-токен наследует права уровня прогона.
   pages: write
   id-token: write
 
 jobs:
+  # Сборка данных Mini App и деплой. Пост тут НЕ делается: он должен уйти
+  # в канал только после успешного деплоя - см. джобу announce ниже.
   update:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
       changed: ${{ steps.commit.outputs.changed }}
-      # SHA коммита с данными: деплой должен собирать именно его, а не
-      # состояние main на момент старта задачи (иначе на сайт уезжают
-      # данные прошлого запуска, и новый патч не появляется в приложении).
+      # SHA коммита с данными: деплой берёт именно его, а не текущую голову
+      # main - на случай, если пока мы работали, в main успели попасть
+      # более свежие коммиты, в которых этих данных ещё нет.
       sha: ${{ steps.commit.outputs.sha }}
 
     steps:
       - uses: actions/checkout@v4
         with:
-          # Полная история: если кто-то закоммитил в main, пока шёл запуск,
-          # rebase перед push должен найти общий предок.
+          # Полная история нужна: если в main успели уйти более свежие
+          # коммиты, push решится rebase'ом, а не перезаписью истории.
           fetch-depth: 0
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.8
+          channel: stable
+          cache: true
+
+      - name: Инициализация
+        if: ${{ inputs.init }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+        run: dart run tool/bot.dart --once --init
+
+      - name: Сборка данных Mini App
+        env:
+          TRANSLATE_BACKEND: deepl
+          DEEPL_KEY: ${{ secrets.DEEPL_KEY }}
+        run: dart run tool/publish.dart
+
+      - name: Коммит данных
+        id: commit
+        # Коммитим всегда, даже если изменилось только состояние: сюда
+        # попадает и кеш переводов - только за счёт него новый патч
+        # переводится один раз, а CI не тратит квоту DeepL повторно.
+        if: always()
+        run: |
+          git config user.name "finals-notes bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add -A web/data tool
+          if git diff --cached --quiet; then
+            echo "изменений нет"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -m "data: патчи на $(date -u +%Y-%m-%dT%H:%MZ)"
+          # Если в main успели уйти более свежие коммиты, push решается
+          # rebase'ом поверх них - данные всё равно лучше, чем их отсутствие.
+          for attempt in 1 2 3; do
+            if git push; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+              echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "push не прошёл, ребейз на автостэш (попытка $attempt)"
+            git pull --rebase --autostash || true
+          done
+          echo "не удалось отправить данные" >&2
+          exit 1
+
+      - name: Коммит раз в месяц
+        # GitHub отключает расписание в публичном репозитории после 60 дней
+        # без коммитов. Так что раз в месяц workflow сам коммитит
+        # tool/.last-run: пусть даже патчи не выходили, история живёт.
+        if: always()
+        run: |
+          if [ "$(date -u +%d)" != "01" ]; then
+            echo "не первый день месяца"
+            exit 0
+          fi
+          echo "$(date -u +%Y-%m-%dT%H:%MZ)" > tool/.last-run
+          git add tool/.last-run
+          if git diff --cached --quiet; then
+            echo "коммит раз в месяц не нужен"
+            exit 0
+          fi
+          git commit -m "chore: подтверждение активности"
+          git push
+
+  # Деплой сайта: только когда патчи или переводы реально изменились,
+  # иначе каждые 15 минут впустую собиралась бы Flutter-сборка.
+  deploy:
+    needs: update
+    if: needs.update.outputs.changed == 'true'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy.yml
+    # Передаём SHA именно этого прогона: если в main уже успел уйти более
+    # свежий коммит, деплой опубликует те данные, что были проверены здесь.
+    with:
+      sha: ${{ needs.update.outputs.sha }}
+
+  # Пост в канал идёт последним: только когда данные уже на Pages. Так
+  # кнопка «открой приложение» не обещает то, чего в приложении ещё нет.
+  announce:
+    needs: [update, deploy]
+    if: >
+      always() &&
+      needs.update.result == 'success' &&
+      (needs.deploy.result == 'success' || needs.deploy.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Берём коммит, на котором задеплоены данные (если деплой был в
+          # этом прогоне) - пост и сайт согласованы по версии.
+          ref: ${{ needs.update.outputs.sha || github.sha }}
 
       - uses: subosito/flutter-action@v2
         with:
@@ -63,100 +173,41 @@ jobs:
       - name: Зависимости
         run: flutter pub get
 
-      # ffmpeg нужен боту: из зацикленного видео патча он собирает «гифку»
-      # для канала. В свежих образах ubuntu-раннеров пакета нет.
+      # ffmpeg нужен посту, а не данным: «гифку» из видео-блока патча
+      # собирает бот при отправке. В свежих образах ubuntu его нет.
       - name: ffmpeg
         run: sudo apt-get install -y -qq ffmpeg
 
-      - name: Пост в канал
-        if: ${{ !inputs.init }}
+      - name: Публикация поста в канал
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
           TRANSLATE_BACKEND: deepl
           DEEPL_KEY: ${{ secrets.DEEPL_KEY }}
-          # Ссылка на Mini App. По умолчанию - короткий адрес нашего бота,
-          # чтобы кнопка работала и без настройки variable.
+          # Ссылка на Mini App для кнопки: сначала variable репозитория,
+          # иначе - дефолт по имени бота.
           MINIAPP_URL: ${{ vars.MINIAPP_URL || 'https://t.me/finals_notes_bot/app' }}
         run: dart run tool/bot.dart --once ${{ inputs.force && '--force' || '' }} ${{ inputs.patch && format('--patch={0}', inputs.patch) || '' }}
 
-      - name: Запомнить текущий патч
-        if: ${{ inputs.init }}
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
-        run: dart run tool/bot.dart --once --init
-
-      - name: Данные для Mini App
-        # Даже если пост в канал не ушёл, приложение должно получить свежие
-        # данные: бот повторит публикацию на следующем запуске.
-        if: always()
-        env:
-          TRANSLATE_BACKEND: deepl
-          DEEPL_KEY: ${{ secrets.DEEPL_KEY }}
-        run: dart run tool/publish.dart
-
-      - name: Коммит данных
-        id: commit
-        # Даже если пост упал, состояние и кеш стоит сохранить: иначе
-        # следующий запуск попробует опубликовать тот же патч ещё раз.
+      - name: Коммит состояния бота
+        # Коммитим состояние бота и его кеш переводов: следующий прогон
+        # не перепостит тот же патч и не потратит квоту DeepL повторно.
         if: always()
         run: |
           git config user.name "finals-notes bot"
           git config user.email "bot@users.noreply.github.com"
-          git add -A web/data tool
+          git add -A tool/.bot-state.json tool/.translation-cache.json
           if git diff --cached --quiet; then
-            echo "Изменений нет"
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "состояние бота не изменилось"
             exit 0
           fi
-          git commit -m "data: патчи на $(date -u +%Y-%m-%dT%H:%MZ)"
-          # Пока шёл запуск, в main мог прилететь чужой коммит (например,
-          # правка кода). Тогда push отклоняется - подтягиваем и пробуем снова.
+          git commit -m "bot: состояние публикации на $(date -u +%Y-%m-%dT%H:%MZ)"
           for attempt in 1 2 3; do
             if git push; then
-              echo "changed=true" >> "$GITHUB_OUTPUT"
-              echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            echo "push не прошёл, подтягиваю изменения (попытка $attempt)"
+            echo "push не прошёл, ребейз на автостэш (попытка $attempt)"
             git pull --rebase --autostash || true
           done
-          echo "не удалось запушить данные" >&2
+          echo "не удалось отправить состояние бота" >&2
           exit 1
-
-      - name: Отметка активности
-        # GitHub отключает расписание в публичном репозитории после 60 дней
-        # без коммитов. Раз в месяц трогаем маленький файл, чтобы не отключил.
-        if: always()
-        run: |
-          if [ "$(date -u +%d)" != "01" ]; then
-            echo "не первое число — пропускаю"
-            exit 0
-          fi
-          echo "$(date -u +%Y-%m-%dT%H:%MZ)" > tool/.last-run
-          git add tool/.last-run
-          if git diff --cached --quiet; then
-            echo "Отметка уже стоит"
-            exit 0
-          fi
-          git commit -m "chore: отметка активности"
-          git push
-
-  # Деплой вызывается из этого же запуска: коммит данных сделан через
-  # GITHUB_TOKEN и сам по себе другие workflow не запускает.
-  deploy:
-    needs: update
-    # Сборка Flutter занимает пару минут, поэтому запускаем её только когда
-    # данные реально изменились (или при первом наполнении).
-    if: needs.update.outputs.changed == 'true'
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    uses: ./.github/workflows/deploy.yml
-    # Передаём SHA коммита с данными: по умолчанию вызываемый workflow
-    # собирает состояние main на момент старта задачи, то есть БЕЗ свежих
-    # данных. Из-за этого Mini App показывал предыдущий патч.
-    with:
-      sha: ${{ needs.update.outputs.sha }}
