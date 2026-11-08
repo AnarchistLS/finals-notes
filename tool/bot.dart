@@ -124,13 +124,35 @@ Future<void> _runOnce({
   if (config.init) {
     state.lastPatchId = patch.id;
     state.lastPostedAt = DateTime.now().toIso8601String();
+    state.pendingPatchId = null;
+    state.pendingAttempts = 0;
     await state.save(stateFile);
     _log('запомнил текущий патч без публикации: ${patch.title}');
     return;
   }
 
-  if (!config.force && !config.dryRun && state.lastPatchId == patch.id) {
+  const maxAttempts = 4;
+  final isNew = state.lastPatchId != patch.id;
+  final isPending = state.pendingPatchId == patch.id;
+  final attempts = isPending ? (state.pendingAttempts ?? 0) : 0;
+
+  // Ни «нового» патча, ни недопоста, force не просили — тишина.
+  if (!config.force && !config.dryRun && !isNew && !isPending) {
     _log('новых патчей нет. Последний опубликованный: ${patch.title}');
+    return;
+  }
+
+  // Повторы исчерпаны (сервер постит прямо, а Telegram не даёт): помечаем
+  // патч опубликованным молча, чтобы бот не спамил каналом всю ночь.
+  // Данные патча всё равно уже в Mini App (деплой идёт раньше поста).
+  if (!config.force && !config.dryRun && isPending && attempts >= maxAttempts) {
+    _log('попыток публикации: $attempts из $maxAttempts, дальше тишина. '
+        'Пост не ушёл, помечаю ${patch.title} как опубликованный (данные уже в приложении).');
+    state.lastPatchId = patch.id;
+    state.lastPostedAt = DateTime.now().toIso8601String();
+    state.pendingPatchId = null;
+    state.pendingAttempts = 0;
+    await state.save(stateFile);
     return;
   }
 
@@ -272,6 +294,15 @@ Future<void> _runOnce({
     }
   }
 
+  // Пишем «берёмся постить» ДО отправки: если Telegram упадёт, следующий
+  // прогон увидит pending (а не «свежий патч») и повторит ограниченно,
+  // а не вечным циклом каждые 5 минут.
+  if (config.patchId == null && !config.dryRun) {
+    state.pendingPatchId = patch.id;
+    state.pendingAttempts = attempts + 1;
+    await state.save(stateFile);
+  }
+
   for (var i = 0; i < messages.length; i++) {
     final isLast = i + 1 == messages.length;
     await _sendMessage(
@@ -296,6 +327,8 @@ Future<void> _runOnce({
   if (config.patchId == null) {
     state.lastPatchId = patch.id;
     state.lastPostedAt = DateTime.now().toIso8601String();
+    state.pendingPatchId = null;
+    state.pendingAttempts = 0;
     await state.save(stateFile);
   }
   _log('готово: ${patch.title}');
@@ -434,10 +467,18 @@ Future<void> _sendMessage({  required http.Client client,
 }
 
 class _BotState {
-  _BotState({this.lastPatchId, this.lastPostedAt});
+  _BotState({this.lastPatchId, this.lastPostedAt, this.pendingPatchId, this.pendingAttempts});
 
   String? lastPatchId;
   String? lastPostedAt;
+
+  /// Патч, который бот собирается опубликовать (или повторяет после сбоя).
+  /// Пишется ДО отправки: если Telegram упал, следующий прогон увидит
+  /// pending, а не «свежий патч», и не кого-то не заспамит.
+  String? pendingPatchId;
+
+  /// Сколько раз уже пробовали (0 — только взялись).
+  int? pendingAttempts;
 
   static Future<_BotState> load(File file) async {
     if (!file.existsSync()) return _BotState();
@@ -447,6 +488,8 @@ class _BotState {
         return _BotState(
           lastPatchId: decoded['lastPatchId'] as String?,
           lastPostedAt: decoded['lastPostedAt'] as String?,
+          pendingPatchId: decoded['pendingPatchId'] as String?,
+          pendingAttempts: (decoded['pendingAttempts'] as num?)?.toInt() ?? 0,
         );
       }
     } catch (_) {
@@ -460,6 +503,8 @@ class _BotState {
     await file.writeAsString(jsonEncode({
       'lastPatchId': lastPatchId,
       'lastPostedAt': lastPostedAt,
+      'pendingPatchId': pendingPatchId,
+      'pendingAttempts': pendingAttempts ?? 0,
     }));
   }
 }
