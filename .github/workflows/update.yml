@@ -160,9 +160,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Берём коммит, на котором задеплоены данные (если деплой был в
-          # этом прогоне) - пост и сайт согласованы по версии.
-          ref: ${{ needs.update.outputs.sha || github.sha }}
+          # main: чекаут ветки (attached). Раньше брали SHA и announce
+          # попадал в detached HEAD: состояние коммитилось локально,
+          # а push падал ("You are not currently on a branch"), и пост
+          # уходил каждым новым прогоном заново — тот самый ночной спам.
+          # Данные prepare уже на main: их push отработал до деплоя.
+          ref: main
+          fetch-depth: 0
 
       - uses: subosito/flutter-action@v2
         with:
